@@ -8,6 +8,35 @@ const Order_1 = __importDefault(require("../models/Order"));
 const Inventory_1 = __importDefault(require("../models/Inventory"));
 const errorHandler_1 = require("../middleware/errorHandler");
 const socketService_1 = require("../services/socketService");
+const s3Service_1 = require("../services/s3Service");
+// Helper to process image URLs in messages to presigned URLs
+const processMessageUrls = async (message) => {
+    // Match [Image: url], [Video: url], [File: url:name] patterns
+    const urlPattern = /\[(Image|Video|File):\s*([^\]\s]+)(?::([^\]]+))?\]/g;
+    const matches = [...message.matchAll(urlPattern)];
+    if (matches.length === 0)
+        return message;
+    let processedMessage = message;
+    for (const match of matches) {
+        const [fullMatch, type, url, name] = match;
+        try {
+            // Generate presigned URL
+            const presignedUrl = await (0, s3Service_1.getViewUrl)(url);
+            // Replace the URL in the message
+            if (type === 'File' && name) {
+                processedMessage = processedMessage.replace(fullMatch, `[File: ${presignedUrl}:${name}]`);
+            }
+            else {
+                processedMessage = processedMessage.replace(fullMatch, `[${type}: ${presignedUrl}]`);
+            }
+        }
+        catch (error) {
+            console.error('[OrderController] Error processing URL:', error);
+            // Keep original URL if presigning fails
+        }
+    }
+    return processedMessage;
+};
 // GET /api/orders
 const getOrders = async (req, res) => {
     const { status, page = 1, limit = 20 } = req.query;
@@ -45,19 +74,29 @@ const getOrders = async (req, res) => {
         Order_1.default.countDocuments(filter),
     ]);
     console.log('[OrderController] 🔍 Found orders:', total, 'for user:', userId.toString(), 'role:', role);
+    // Process message URLs to generate presigned URLs for images
+    const processedOrders = await Promise.all(orders.map(async (order) => {
+        if (order.messageHistory && order.messageHistory.length > 0) {
+            order.messageHistory = await Promise.all(order.messageHistory.map(async (msg) => ({
+                ...msg,
+                message: await processMessageUrls(msg.message),
+            })));
+        }
+        return order;
+    }));
     // Log sample order if found for debugging
-    if (orders.length > 0) {
+    if (processedOrders.length > 0) {
         console.log('[OrderController] 🔍 Sample order:', {
-            orderId: orders[0]._id,
-            orderNumber: orders[0].orderNumber,
-            farmerId: orders[0].farmerId?._id || orders[0].farmerId,
-            buyerId: orders[0].buyerId?._id || orders[0].buyerId,
-            status: orders[0].status
+            orderId: processedOrders[0]._id,
+            orderNumber: processedOrders[0].orderNumber,
+            farmerId: processedOrders[0].farmerId?._id || processedOrders[0].farmerId,
+            buyerId: processedOrders[0].buyerId?._id || processedOrders[0].buyerId,
+            status: processedOrders[0].status
         });
     }
     res.status(200).json({
         success: true,
-        data: { orders, total, page: Number(page), pages: Math.ceil(total / Number(limit)) },
+        data: { orders: processedOrders, total, page: Number(page), pages: Math.ceil(total / Number(limit)) },
     });
 };
 exports.getOrders = getOrders;
@@ -327,42 +366,79 @@ exports.updateOrderStatus = updateOrderStatus;
 // POST /api/orders/:id/messages
 const sendMessage = async (req, res) => {
     const { message } = req.body;
+    const senderId = req.user._id;
+    const senderName = req.user.name;
+    const senderRole = req.user.role;
+    console.log('[OrderController] 💬 sendMessage called:', {
+        orderId: req.params.id,
+        senderId: senderId.toString(),
+        senderName,
+        senderRole
+    });
     // Find order - cross-tenant B2B orders (removed tenantId filter)
     const order = await Order_1.default.findOne({
         _id: req.params.id,
         isActive: true,
-        $or: [{ farmerId: req.user._id }, { buyerId: req.user._id }]
-    });
+        $or: [{ farmerId: senderId }, { buyerId: senderId }]
+    })
+        .populate('buyerId', 'name')
+        .populate('farmerId', 'name');
     if (!order)
         throw (0, errorHandler_1.createError)('Order not found or unauthorized', 404);
     const newMessage = {
-        senderId: req.user._id,
+        senderId,
+        senderName,
+        senderRole,
         message,
         timestamp: new Date()
     };
     order.messageHistory.push(newMessage);
     await order.save();
     // Determine recipient (the other party in the order)
-    const recipientId = req.user._id.toString() === order.farmerId.toString()
-        ? order.buyerId.toString()
-        : order.farmerId.toString();
-    // Real-time broadcast
-    const { emitNewMessage } = require('../services/socketService');
-    emitNewMessage(recipientId, {
+    const isFarmer = order.farmerId._id.toString() === senderId.toString();
+    const recipientId = isFarmer
+        ? order.buyerId._id.toString()
+        : order.farmerId._id.toString();
+    const recipientName = isFarmer
+        ? order.buyerId.name
+        : order.farmerId.name;
+    const messageData = {
         orderId: order._id,
+        orderNumber: order.orderNumber,
         message: newMessage.message,
-        senderId: newMessage.senderId,
-        timestamp: newMessage.timestamp
+        senderId: senderId.toString(),
+        senderName,
+        senderRole,
+        timestamp: newMessage.timestamp.toISOString(),
+    };
+    // Real-time broadcast to recipient
+    const { emitNewMessage } = require('../services/socketService');
+    emitNewMessage(recipientId, messageData);
+    // Also emit to sender for confirmation (so all open tabs sync)
+    emitNewMessage(senderId.toString(), messageData);
+    console.log('[OrderController] ✅ Message sent:', {
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        from: senderName,
+        to: recipientName,
+        message: message.substring(0, 50) + (message.length > 50 ? '...' : '')
     });
-    res.status(201).json({ success: true, message: 'Message sent', data: { message: newMessage } });
+    res.status(201).json({
+        success: true,
+        message: 'Message sent',
+        data: {
+            message: newMessage,
+            orderNumber: order.orderNumber
+        }
+    });
 };
 exports.sendMessage = sendMessage;
 // GET /api/orders/stats/summary
 const getOrderStats = async (req, res) => {
-    const tenantId = req.tenantId;
     const userId = req.user._id;
     const role = req.user.role;
-    const matchFilter = { tenantId, isActive: true };
+    // Build filter - cross-tenant B2B orders
+    const matchFilter = { isActive: true };
     if (role === 'FARMER')
         matchFilter.farmerId = userId;
     if (role === 'BUYER')

@@ -93,6 +93,8 @@ const OrderSchema = new mongoose_1.Schema({
     trackingNumber: { type: String },
     messageHistory: [{
             senderId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
+            senderName: { type: String },
+            senderRole: { type: String },
             message: { type: String, required: true },
             timestamp: { type: Date, default: Date.now }
         }],

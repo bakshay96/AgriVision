@@ -22,6 +22,7 @@ const cropEncyclopedia_1 = __importDefault(require("./routes/cropEncyclopedia"))
 const financial_1 = __importDefault(require("./routes/financial"));
 const upload_1 = __importDefault(require("./routes/upload"));
 const user_1 = __importDefault(require("./routes/user"));
+const homeController_1 = require("./controllers/homeController");
 const errorHandler_1 = require("./middleware/errorHandler");
 const app = (0, express_1.default)();
 // ─── Security & Parsing ───────────────────────────────────────────────────────
@@ -68,6 +69,8 @@ const limiter = (0, express_rate_limit_1.default)({
 app.use('/api', limiter);
 // ─── Static uploads ───────────────────────────────────────────────────────────
 app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'uploads')));
+// ─── Home Route ───────────────────────────────────────────────────────────────
+app.get('/', homeController_1.getHomeInfo);
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
     res.status(200).json({

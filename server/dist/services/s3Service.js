@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUploadConfig = exports.extractKeyFromUrl = exports.getPresignedUrl = exports.deleteFile = exports.uploadBase64Image = exports.uploadBuffer = exports.S3ServiceError = void 0;
+exports.getViewUrl = exports.getUploadConfig = exports.extractKeyFromUrl = exports.getPresignedUrl = exports.deleteFile = exports.uploadBase64Image = exports.uploadBuffer = exports.S3ServiceError = void 0;
 const client_s3_1 = require("@aws-sdk/client-s3");
 const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const s3_1 = require("../config/s3");
@@ -28,7 +28,18 @@ const ALLOWED_IMAGE_TYPES = [
     'image/webp',
     'image/gif',
 ];
+const ALLOWED_MEDIA_TYPES = [
+    ...ALLOWED_IMAGE_TYPES,
+    'video/mp4',
+    'video/webm',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB for videos
 // ─────────────────────────────────────────────────────────────────────────────
 // Generate unique S3 key for file
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,13 +54,15 @@ const generateS3Key = (originalName, folder = 'uploads') => {
 // Validate file before upload
 // ─────────────────────────────────────────────────────────────────────────────
 const validateFile = (buffer, mimeType, originalName) => {
+    const isVideo = mimeType.startsWith('video/');
+    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_FILE_SIZE;
     // Check file size
-    if (buffer.length > MAX_FILE_SIZE) {
-        throw new S3ServiceError('FILE_TOO_LARGE', `File size exceeds maximum limit of ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+    if (buffer.length > maxSize) {
+        throw new S3ServiceError('FILE_TOO_LARGE', `File size exceeds maximum limit of ${maxSize / 1024 / 1024}MB`);
     }
     // Check file type
-    if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-        throw new S3ServiceError('INVALID_FILE_TYPE', `Invalid file type: ${mimeType}. Allowed types: ${ALLOWED_IMAGE_TYPES.join(', ')}`);
+    if (!ALLOWED_MEDIA_TYPES.includes(mimeType)) {
+        throw new S3ServiceError('INVALID_FILE_TYPE', `Invalid file type: ${mimeType}. Allowed types: ${ALLOWED_MEDIA_TYPES.join(', ')}`);
     }
     // Validate file extension matches mime type
     const extension = path_1.default.extname(originalName).toLowerCase();
@@ -59,6 +72,13 @@ const validateFile = (buffer, mimeType, originalName) => {
         'image/png': ['.png'],
         'image/webp': ['.webp'],
         'image/gif': ['.gif'],
+        'video/mp4': ['.mp4'],
+        'video/webm': ['.webm'],
+        'application/pdf': ['.pdf'],
+        'application/msword': ['.doc'],
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+        'application/vnd.ms-excel': ['.xls'],
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     };
     const validExtensions = mimeExtensionMap[mimeType] || [];
     if (!validExtensions.includes(extension)) {
@@ -188,10 +208,41 @@ exports.extractKeyFromUrl = extractKeyFromUrl;
 // ─────────────────────────────────────────────────────────────────────────────
 const getUploadConfig = () => ({
     maxFileSize: MAX_FILE_SIZE,
+    maxVideoSize: MAX_VIDEO_SIZE,
     allowedTypes: ALLOWED_IMAGE_TYPES,
+    allowedMediaTypes: ALLOWED_MEDIA_TYPES,
     isConfigured: (0, s3_1.isS3Configured)(),
     bucket: s3_1.S3_BUCKET_NAME,
     region: process.env.AWS_REGION || 'ap-south-1',
 });
 exports.getUploadConfig = getUploadConfig;
+// ─────────────────────────────────────────────────────────────────────────────
+// Generate presigned URL for viewing (for private buckets)
+// ─────────────────────────────────────────────────────────────────────────────
+const getViewUrl = async (keyOrUrl, expirationSeconds = 7 * 24 * 60 * 60 // 7 days default
+) => {
+    if (!(0, s3_1.isS3Configured)()) {
+        return keyOrUrl; // Return as-is if S3 not configured
+    }
+    // Extract key if full URL provided
+    const key = keyOrUrl.includes('amazonaws.com')
+        ? (0, exports.extractKeyFromUrl)(keyOrUrl) || keyOrUrl
+        : keyOrUrl;
+    try {
+        const command = new client_s3_1.GetObjectCommand({
+            Bucket: s3_1.S3_BUCKET_NAME,
+            Key: key,
+        });
+        const url = await (0, s3_request_presigner_1.getSignedUrl)(s3_1.s3Client, command, {
+            expiresIn: expirationSeconds,
+        });
+        return url;
+    }
+    catch (error) {
+        console.error('[S3Service] ❌ Presigned URL generation failed:', error);
+        // Return original URL as fallback
+        return (0, s3_1.getS3Url)(key);
+    }
+};
+exports.getViewUrl = getViewUrl;
 //# sourceMappingURL=s3Service.js.map

@@ -20,9 +20,12 @@ export declare const getPresignedUrl: (key: string, expirationSeconds?: number) 
 export declare const extractKeyFromUrl: (url: string) => string | null;
 export declare const getUploadConfig: () => {
     maxFileSize: number;
+    maxVideoSize: number;
     allowedTypes: string[];
+    allowedMediaTypes: string[];
     isConfigured: boolean;
     bucket: string;
     region: string;
 };
+export declare const getViewUrl: (keyOrUrl: string, expirationSeconds?: number) => Promise<string>;
 //# sourceMappingURL=s3Service.d.ts.map

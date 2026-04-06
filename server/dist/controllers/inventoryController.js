@@ -7,6 +7,30 @@ exports.getInventoryWithOrders = exports.deleteInventory = exports.updateInvento
 const Inventory_1 = __importDefault(require("../models/Inventory"));
 const errorHandler_1 = require("../middleware/errorHandler");
 const s3Service_1 = require("../services/s3Service");
+// Helper to process image URLs in messages to presigned URLs
+const processMessageUrls = async (message) => {
+    const urlPattern = /\[(Image|Video|File):\s*([^\]\s]+)(?::([^\]]+))?\]/g;
+    const matches = [...message.matchAll(urlPattern)];
+    if (matches.length === 0)
+        return message;
+    let processedMessage = message;
+    for (const match of matches) {
+        const [fullMatch, type, url, name] = match;
+        try {
+            const presignedUrl = await (0, s3Service_1.getViewUrl)(url);
+            if (type === 'File' && name) {
+                processedMessage = processedMessage.replace(fullMatch, `[File: ${presignedUrl}:${name}]`);
+            }
+            else {
+                processedMessage = processedMessage.replace(fullMatch, `[${type}: ${presignedUrl}]`);
+            }
+        }
+        catch (error) {
+            console.error('[InventoryController] Error processing URL:', error);
+        }
+    }
+    return processedMessage;
+};
 // GET /api/inventory  (Public — for marketplace)
 const getInventory = async (req, res) => {
     const { search, cropName, status, minPrice, maxPrice, page = 1, limit = 20, sort = '-createdAt' } = req.query;
@@ -233,11 +257,21 @@ const getInventoryWithOrders = async (req, res) => {
         }, 0),
     };
     console.log('[InventoryController] Order stats:', stats);
+    // Process message URLs in orders
+    const processedOrders = await Promise.all(orders.map(async (order) => {
+        if (order.messageHistory && order.messageHistory.length > 0) {
+            order.messageHistory = await Promise.all(order.messageHistory.map(async (msg) => ({
+                ...msg,
+                message: await processMessageUrls(msg.message),
+            })));
+        }
+        return order;
+    }));
     res.status(200).json({
         success: true,
         data: {
             inventory: item,
-            orders,
+            orders: processedOrders,
             stats,
         },
     });

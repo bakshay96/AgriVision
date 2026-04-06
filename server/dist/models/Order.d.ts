@@ -24,6 +24,8 @@ export interface IShippingAddress {
 }
 export interface IOrderMessage {
     senderId: mongoose.Types.ObjectId;
+    senderName?: string;
+    senderRole?: string;
     message: string;
     timestamp: Date;
 }

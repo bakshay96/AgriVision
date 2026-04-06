@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.local
+.env.example
+.git
+.gitignore
+*.md
+docs
+uploads
+.DS_Store
+Thumbs.db

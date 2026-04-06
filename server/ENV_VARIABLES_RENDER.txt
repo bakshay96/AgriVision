@@ -1,0 +1,33 @@
+# ============================================
+# AgriVision Backend - Production Environment Variables
+# Copy these to Render Dashboard > Environment tab
+# ============================================
+
+# Node Environment
+NODE_ENV=production
+
+# Port (Render requires this)
+PORT=10000
+
+# MongoDB Atlas Connection String
+MONGO_URI=mongodb+srv://akshaymaliedu_db_user:akshay@cluster0.o9hauwk.mongodb.net/agrivision_pro?appName=agri_vision_pro&retryWrites=true&w=majority
+
+# JWT Configuration
+JWT_SECRET=agrivision_dev_secret_key_2026_change_in_production
+JWT_EXPIRES_IN=7d
+
+# Google Gemini AI API Key
+GEMINI_API_KEY=AIzaSyDVuyWGLmUkmlExGpkcDq7st8dJcQFsaPU
+
+# AWS S3 Configuration
+AWS_ACCESS_KEY_ID=AKIAQTTVYSGOXLSWJXKT
+AWS_SECRET_ACCESS_KEY=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
+AWS_S3_BUCKET_NAME=agrivision-uploads-042122908061-ap-south-1-an
+AWS_REGION=ap-south-1
+
+# CORS - Frontend URL (Update after frontend deployment)
+CLIENT_URL=http://localhost:3000
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100

@@ -19,6 +19,7 @@ import cropEncyclopediaRoutes from './routes/cropEncyclopedia';
 import financialRoutes from './routes/financial';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/user';
+import { getHomeInfo } from './controllers/homeController';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
 const app = express();
@@ -74,6 +75,9 @@ app.use('/api', limiter);
 
 // ─── Static uploads ───────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+// ─── Home Route ───────────────────────────────────────────────────────────────
+app.get('/', getHomeInfo);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
