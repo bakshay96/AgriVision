@@ -7,7 +7,13 @@ let io = null;
 const initSocketService = (httpServer) => {
     io = new socket_io_1.Server(httpServer, {
         cors: {
-            origin: process.env.CLIENT_URL || 'http://localhost:3000',
+            origin: [
+                process.env.CLIENT_URL || '',
+                'http://localhost:3000',
+                'http://localhost:5173',
+                'http://127.0.0.1:3000',
+                'http://127.0.0.1:5173',
+            ].filter(Boolean),
             methods: ['GET', 'POST'],
             credentials: true,
         },

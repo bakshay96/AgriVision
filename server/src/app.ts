@@ -40,7 +40,8 @@ app.use(
         ],
         connectSrc: [
           "'self'",
-          process.env.CLIENT_URL || 'http://localhost:3000',
+          'http://localhost:3000',
+          process.env.CLIENT_URL || '',
           'https://*.amazonaws.com', // Allow S3 connections
         ],
       },
@@ -49,7 +50,12 @@ app.use(
 );
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: [
+      process.env.CLIENT_URL || '',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      "*"
+    ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
