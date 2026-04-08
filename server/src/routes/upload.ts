@@ -5,6 +5,9 @@ import {
   uploadMultipleImages,
   getUploadConfiguration,
   uploadAndAnalyze,
+  getMyImages,
+  deleteUpload,
+  proxyImage,
 } from '../controllers/uploadController';
 import { protect } from '../middleware/auth';
 
@@ -34,8 +37,14 @@ const upload = multer({
 // Upload Routes
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Public proxy route for short URLs
+router.get('/raw/:id', proxyImage);
+
 // Get upload configuration (public)
 router.get('/config', getUploadConfiguration);
+
+// Get user's uploaded images (private)
+router.get('/my-images', protect, getMyImages);
 
 // Upload single image (private)
 router.post(
@@ -60,5 +69,8 @@ router.post(
   upload.single('image'),
   uploadAndAnalyze
 );
+
+// Delete image from S3 and DB (private)
+router.delete('/:id', protect, deleteUpload);
 
 export default router;

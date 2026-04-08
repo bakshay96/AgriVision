@@ -169,6 +169,12 @@ export const uploadApi = {
       timeout: 60000, // AI analysis may take longer
     });
   },
+  
+  // Get user's uploaded images
+  getMyImages: () => api.get('/upload/my-images'),
+  
+  // Delete uploaded image
+  deleteImage: (id: string) => api.delete(`/upload/${id}`),
 };
 
 // ─── User Profile & Crops ───────────────────────────────────────────────────

@@ -7,7 +7,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deploy": "next build && npx netlify-cli deploy --dir=out",
+    "deploy:prod": "next build && npx netlify-cli deploy --dir=out --prod"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.17.15",
@@ -15,6 +17,7 @@
     "axios": "^1.6.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "date-fns": "^4.1.0",
     "framer-motion": "^11.3.0",
     "lucide-react": "^0.469.0",
     "next": "^15.0.0",

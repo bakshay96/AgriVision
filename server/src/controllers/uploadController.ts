@@ -1,15 +1,17 @@
 import { Response } from 'express';
 import asyncHandler from 'express-async-handler';
 import { AuthRequest } from '../middleware/auth';
-import { uploadBuffer, S3ServiceError, getUploadConfig } from '../services/s3Service';
+import { uploadBuffer, deleteFile, getViewUrl, S3ServiceError, getUploadConfig } from '../services/s3Service';
+import { getS3Url } from '../config/s3';
 import { AIServiceError } from '../services/aiService';
+import Upload from '../models/Upload';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Upload Controller - Handles image uploads to S3
+// Upload Controller - Handles image uploads to S3 and database tracking
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Upload single image to S3
+ * @desc    Upload single image to S3 and save to DB
  * @route   POST /api/upload/image
  * @access  Private
  */
@@ -22,7 +24,7 @@ export const uploadImage = asyncHandler(async (req: AuthRequest, res: Response):
     return;
   }
 
-  const { buffer, originalname, mimetype } = req.file;
+  const { buffer, originalname, mimetype, size } = req.file;
   const folder = req.body.folder || 'uploads';
 
   try {
@@ -37,15 +39,29 @@ export const uploadImage = asyncHandler(async (req: AuthRequest, res: Response):
       }
     );
 
+    // Save to database
+    const newUpload = await Upload.create({
+      tenantId: req.tenantId,
+      userId: req.user?._id,
+      url: result.url,
+      key: result.key,
+      originalName: originalname,
+      size: size,
+      mimeType: mimetype,
+      folder: folder,
+    });
+
+    // Use direct AWS URLs as requested (presigned for visibility, base for storage)
+    const viewUrl = await getViewUrl(result.key);
+    const baseUrl = getS3Url(result.key);
+
     res.status(201).json({
       success: true,
       message: 'Image uploaded successfully',
       data: {
-        url: result.url,
-        key: result.key,
-        size: result.size,
-        mimeType: result.mimeType,
-        uploadedAt: result.uploadedAt,
+        ...newUpload.toObject(),
+        url: viewUrl,   // Direct AWS URL (presigned) for UI visibility
+        baseUrl: baseUrl // Direct AWS Base URL (short) for copying
       },
     });
   } catch (error) {
@@ -62,7 +78,7 @@ export const uploadImage = asyncHandler(async (req: AuthRequest, res: Response):
 });
 
 /**
- * @desc    Upload multiple images to S3
+ * @desc    Upload multiple images to S3 and save to DB
  * @route   POST /api/upload/images
  * @access  Private
  */
@@ -90,12 +106,22 @@ export const uploadMultipleImages = asyncHandler(async (req: AuthRequest, res: R
           'tenant-id': req.tenantId?.toString() || 'default',
         }
       );
-      return {
-        success: true,
+
+      // Save to database
+      const newUpload = await Upload.create({
+        tenantId: req.tenantId,
+        userId: req.user?._id,
         url: result.url,
         key: result.key,
-        originalName: result.originalName,
-        size: result.size,
+        originalName: file.originalname,
+        size: file.size,
+        mimeType: file.mimetype,
+        folder: folder,
+      });
+
+      return {
+        success: true,
+        ...newUpload.toObject(),
       };
     } catch (error) {
       return {
@@ -118,6 +144,101 @@ export const uploadMultipleImages = asyncHandler(async (req: AuthRequest, res: R
       failed,
     },
   });
+});
+
+/**
+ * @desc    Get user's uploaded images
+ * @route   GET /api/upload/my-images
+ * @access  Private
+ */
+export const getMyImages = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const images = await Upload.find({
+    userId: req.user?._id,
+    isActive: true
+  }).sort({ createdAt: -1 });
+
+  // Map results to include both direct AWS view URLs and short base URLs
+  const imagesWithUrls = await Promise.all(
+    images.map(async (img) => {
+      const viewUrl = await getViewUrl(img.key);
+      return {
+        ...img.toObject(),
+        url: viewUrl,      // Direct AWS Presigned URL for visibility
+        baseUrl: getS3Url(img.key) // Direct AWS Base URL for copying
+      };
+    })
+  );
+
+  res.status(200).json({
+    success: true,
+    data: imagesWithUrls,
+  });
+});
+
+/**
+ * @desc    Short URL Proxy - Redirects to a fresh presigned URL
+ * @route   GET /api/upload/raw/:id
+ * @access  Public (for image embedding)
+ */
+export const proxyImage = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const upload = await Upload.findById(req.params.id);
+
+  if (!upload) {
+    res.status(404).send('Image not found');
+    return;
+  }
+
+  try {
+    const presignedUrl = await getViewUrl(upload.key, 3600); // 1 hour token
+    res.redirect(presignedUrl);
+  } catch (error) {
+    res.status(500).send('Error generating access token');
+  }
+});
+
+/**
+ * @desc    Delete uploaded image from S3 and DB
+ * @route   DELETE /api/upload/:id
+ * @access  Private
+ */
+export const deleteUpload = asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const upload = await Upload.findById(req.params.id);
+
+  if (!upload) {
+    res.status(404).json({
+      success: false,
+      message: 'Upload not found',
+    });
+    return;
+  }
+
+  // Check ownership
+  if (upload.userId.toString() !== req.user?._id?.toString()) {
+    res.status(403).json({
+      success: false,
+      message: 'Not authorized to delete this image',
+    });
+    return;
+  }
+
+  try {
+    // Delete from S3
+    await deleteFile(upload.key);
+
+    // Delete from DB (or soft delete)
+    await Upload.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Image deleted successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete image',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 });
 
 /**
@@ -149,7 +270,7 @@ export const uploadAndAnalyze = asyncHandler(async (req: AuthRequest, res: Respo
   }
 
   const { analyzeImageBuffer } = await import('../services/aiService');
-  const { buffer, originalname, mimetype } = req.file;
+  const { buffer, originalname, mimetype, size } = req.file;
   const language = req.body.language || 'English';
 
   try {
@@ -166,6 +287,18 @@ export const uploadAndAnalyze = asyncHandler(async (req: AuthRequest, res: Respo
       }
     );
 
+    // Save to database
+    const newUpload = await Upload.create({
+      tenantId: req.tenantId,
+      userId: req.user?._id,
+      url: uploadResult.url,
+      key: uploadResult.key,
+      originalName: originalname,
+      size: size,
+      mimeType: mimetype,
+      folder: 'crop-scans',
+    });
+
     // Step 2: Analyze with AI
     const analysisResult = await analyzeImageBuffer(buffer, mimetype, language);
 
@@ -176,6 +309,7 @@ export const uploadAndAnalyze = asyncHandler(async (req: AuthRequest, res: Respo
         imageUrl: uploadResult.url,
         imageKey: uploadResult.key,
         analysis: analysisResult,
+        uploadId: newUpload._id,
       },
     });
   } catch (error) {
@@ -189,12 +323,11 @@ export const uploadAndAnalyze = asyncHandler(async (req: AuthRequest, res: Respo
     }
 
     if (error instanceof AIServiceError) {
-      // If AI fails but upload succeeded, return the image URL
       res.status(200).json({
         success: true,
         message: 'Image uploaded but AI analysis failed',
         data: {
-          imageUrl: '', // Will be populated if we want to return partial success
+          imageUrl: '', 
           analysisError: error.message,
         },
       });
