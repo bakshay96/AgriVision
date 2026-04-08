@@ -1,0 +1,4 @@
+0000000000000000000000000000000000000000 1de8df99c732321dafc95e03cb7edd732de344a7 akshaydev11 <akshay.gb@freshmenu.com> 1775461050 +0530	commit (initial): chore: initial commit of AgriVision server ready for deployment
+1de8df99c732321dafc95e03cb7edd732de344a7 00c1fba803307e9d8e86e94c96c7c66fb8a5b308 akshaydev11 <akshay.gb@freshmenu.com> 1775462396 +0530	commit: some chagnes
+00c1fba803307e9d8e86e94c96c7c66fb8a5b308 2bb7f06466370c67335db67fb47e129234214bd2 akshaydev11 <akshay.gb@freshmenu.com> 1775463109 +0530	commit: fix: move @types to dependencies for Render production build
+2bb7f06466370c67335db67fb47e129234214bd2 18c2c905ee5de10d279aaf66518a604243037771 akshaydev11 <akshay.gb@freshmenu.com> 1775565501 +0530	commit: update origin
