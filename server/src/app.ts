@@ -23,7 +23,13 @@ import { getHomeInfo } from './controllers/homeController';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
 const app = express();
-
+const corsOptions = {
+  // Allow your Netlify URL
+  origin: 'https://agirivisiion.netlify.app', 
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true, // Allow cookies/headers if needed
+  optionsSuccessStatus: 204
+};
 // ─── Security & Parsing ───────────────────────────────────────────────────────
 app.use(
   helmet({
@@ -41,6 +47,7 @@ app.use(
         connectSrc: [
           "'self'",
           'http://localhost:3000',
+          'https://agirivisiion.netlify.app',
           process.env.CLIENT_URL || '',
           'https://*.amazonaws.com', // Allow S3 connections
         ],
@@ -48,19 +55,22 @@ app.use(
     },
   })
 );
+
 app.use(
   cors({
     origin: [
       process.env.CLIENT_URL || '',
       'http://localhost:3000',
       'http://127.0.0.1:5173',
-      "*"
+      'https://agirivisiion.netlify.app',
     ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus :204
   })
 );
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
