@@ -189,6 +189,46 @@ npm run dev
 
 6. Open http://localhost:3000 in your browser
 
+## 📸 Virtual Tour
+
+Experience the AgriVision Pro platform through this step-by-step visual journey of a modern farmer's workflow.
+
+### 1. Welcome to AgriVision
+The landing page greets users with a premium, accessible interface highlighting the core value propositions of the platform.
+![Landing Page](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/1_landing_page.png)
+
+### 2. Seamless Onboarding
+A simple, secure registration process designed for ease of use, allowing farmers to quickly join the digital ecosystem.
+![Registration](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/2_register_page.png)
+
+### 3. Intelligence Dashboard
+The central hub for data-driven farming. View recent orders, active crop health scans, and quick navigation to all critical modules.
+![Dashboard](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/3_dashboard.png)
+
+### 4. AI Health Monitor
+Leverage the power of Gemini Vision AI to diagnose crop diseases and pests instantly. Just upload a photo, and get expert treatment advice.
+![AI Health Monitor](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/4_health_monitor.png)
+
+### 5. Market Pulse
+Real-time Mandi price tracking across India. Make informed decisions on when and where to sell your produce for maximum profit.
+![Market Prices](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/5_market_prices.png)
+
+### 6. B2B Marketplace
+A digital storefront to connect directly with bulk buyers. List your inventory, manage orders, and grow your business without middlemen.
+![Marketplace](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/6_marketplace.png)
+
+### 7. Digital Encyclopedia
+A comprehensive guide for 100+ crops, providing expert knowledge on cultivation, pests, and soil requirements at your fingertips.
+![Crop Encyclopedia](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/7_encyclopedia.png)
+
+### 8. Financial Hub
+Manage your farm's finances like a business. Track every expense, monitor income, and analyze your profitability with intuitive reports.
+![Financial Dashboard](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/8_financial.png)
+
+### 9. Secure Exit
+End your session securely with a single click, ensuring your farm data always remains private.
+![Logout](https://agrivision-uploads-042122908061-ap-south-1-an.s3.ap-south-1.amazonaws.com/virtual-tour/9_logout.png)
+
 ## 📱 User Flows
 
 ### Farmer Flow
