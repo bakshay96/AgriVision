@@ -140,7 +140,7 @@ MASAI/
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd MASAI
+cd AgriVision
 ```
 
 2. Install server dependencies:
@@ -159,7 +159,7 @@ npm install
 
 **Server (.env):**
 ```env
-NODE_ENV=development
+NODE_ENV=your-env-name (developement, production etc.)
 PORT=5000
 MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/agrivision_pro
 JWT_SECRET=your_jwt_secret_key
