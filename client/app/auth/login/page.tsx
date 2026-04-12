@@ -1,20 +1,71 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { Leaf, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Leaf, Eye, EyeOff, Loader2, ArrowRight, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/lib/api';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
 import { showErrorToast } from '@/lib/errorHandler';
+import { useLoader } from '@/hooks/useLoader';
+
+interface FormMessage {
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+}
+
+// Form Message Display Component
+function FormMessageDisplay({ message }: { message: FormMessage }) {
+  const icons = {
+    success: <CheckCircle className="h-5 w-5 text-emerald-500" />,
+    error: <XCircle className="h-5 w-5 text-red-500" />,
+    info: <AlertCircle className="h-5 w-5 text-blue-500" />,
+  };
+
+  const bgColors = {
+    success: 'bg-emerald-50 border-emerald-200',
+    error: 'bg-red-50 border-red-200',
+    info: 'bg-blue-50 border-blue-200',
+  };
+
+  const textColors = {
+    success: 'text-emerald-800',
+    error: 'text-red-800',
+    info: 'text-blue-800',
+  };
+
+  const subTextColors = {
+    success: 'text-emerald-600',
+    error: 'text-red-600',
+    info: 'text-blue-600',
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+      className={`flex items-start gap-3 p-4 rounded-xl border ${bgColors[message.type]} mb-4`}
+    >
+      <div className="flex-shrink-0 mt-0.5">{icons[message.type]}</div>
+      <div className="flex-1 min-w-0">
+        <p className={`font-semibold text-sm ${textColors[message.type]}`}>{message.title}</p>
+        <p className={`text-sm mt-0.5 ${subTextColors[message.type]}`}>{message.message}</p>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const { setUser } = useAppStore();
+  const { showLoader, hideLoader } = useLoader();
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [showPassword, setShowPassword] = useState(false);
+  const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({
@@ -22,20 +73,44 @@ export default function LoginPage() {
     farmName: '', farmLocation: '', farmSizeAcres: '',
   });
 
+  // Clear message when tab changes
+  useEffect(() => {
+    setFormMessage(null);
+  }, [tab]);
+
   const { mutate: login, isPending: loginPending } = useMutation({
     mutationFn: () => authApi.login({ email: loginForm.email, password: loginForm.password }),
+    onMutate: () => {
+      showLoader({ variant: 'auth', message: 'Signing In' });
+      setFormMessage(null);
+    },
     onSuccess: (res) => {
       console.log('[Login] Login successful:', res.data);
       const { user, token } = res.data.data;
+      setFormMessage({
+        type: 'success',
+        title: 'Login Successful!',
+        message: `Welcome back, ${user.name}! Redirecting to dashboard...`,
+      });
       setUser(user, token);
       toast.success(`Welcome back, ${user.name}!`, {
         description: 'Redirecting to dashboard...',
       });
+      // Hide loader before redirect
+      hideLoader();
       setTimeout(() => {
         router.push('/dashboard');
       }, 500);
     },
     onError: (err: unknown) => {
+      hideLoader();
+      const error = err as { response?: { data?: { message?: string } } };
+      const errorMessage = error?.response?.data?.message || 'Login failed. Please check your credentials.';
+      setFormMessage({
+        type: 'error',
+        title: 'Login Failed',
+        message: errorMessage,
+      });
       showErrorToast(err, 'Login Failed');
     },
   });
@@ -47,23 +122,61 @@ export default function LoginPage() {
         farmLocation: registerForm.farmLocation ? { address: registerForm.farmLocation } : undefined,
         farmSizeAcres: registerForm.farmSizeAcres ? Number(registerForm.farmSizeAcres) : undefined,
       }),
+    onMutate: () => {
+      showLoader({ variant: 'auth', message: 'Creating Account' });
+      setFormMessage(null);
+    },
     onSuccess: (res) => {
       console.log('[Register] Registration successful:', res.data);
       const { user, token } = res.data.data;
+      setFormMessage({
+        type: 'success',
+        title: 'Account Created!',
+        message: `Welcome to AgriVision Pro, ${user.name}! Setting up your dashboard...`,
+      });
       setUser(user, token);
       toast.success('Account Created Successfully!', {
         description: `Welcome to AgriVision Pro, ${user.name}!`,
       });
+      // Hide loader before redirect
+      hideLoader();
       setTimeout(() => {
         router.push('/dashboard');
       }, 500);
     },
     onError: (err: unknown) => {
+      hideLoader();
+      const error = err as { response?: { data?: { message?: string; errors?: Array<{ msg: string }> } } };
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (error?.response?.data?.errors) {
+        errorMessage = error.response.data.errors.map((e) => e.msg).join(', ');
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      setFormMessage({
+        type: 'error',
+        title: 'Registration Failed',
+        message: errorMessage,
+      });
       showErrorToast(err, 'Registration Failed');
     },
   });
 
   const isPending = loginPending || registerPending;
+
+  // Handle Enter key for form submission
+  const handleKeyDown = (e: React.KeyboardEvent, action: 'login' | 'register') => {
+    if (e.key === 'Enter' && !isPending) {
+      e.preventDefault();
+      if (action === 'login') {
+        login();
+      } else {
+        register();
+      }
+    }
+  };
 
   return (
     <div className="flex min-h-screen">
@@ -115,6 +228,11 @@ export default function LoginPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8">
+            {/* Form Message Display */}
+            <AnimatePresence mode="wait">
+              {formMessage && <FormMessageDisplay message={formMessage} />}
+            </AnimatePresence>
+
             {/* Tab Toggle */}
             <div className="mb-6 flex rounded-xl bg-slate-100 p-1">
               {(['login', 'register'] as const).map((t) => (
@@ -135,6 +253,7 @@ export default function LoginPage() {
             {tab === 'login' ? (
               <form
                 onSubmit={(e) => { e.preventDefault(); login(); }}
+                onKeyDown={(e) => handleKeyDown(e, 'login')}
                 className="space-y-4"
               >
                 <div>
@@ -180,6 +299,7 @@ export default function LoginPage() {
             ) : (
               <form
                 onSubmit={(e) => { e.preventDefault(); register(); }}
+                onKeyDown={(e) => handleKeyDown(e, 'register')}
                 className="space-y-3"
               >
                 {/* Role Selection - Moved to top */}

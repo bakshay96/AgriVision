@@ -47,6 +47,8 @@ interface ChatStore {
   focusChat: (id: string) => void;
   updateChatPosition: (id: string, position: { x: number; y: number }) => void;
   updateChatMessages: (id: string, messages: ChatMessage[]) => void;
+  // Append a single incoming message to the correct open session (live updates)
+  appendChatMessage: (orderId: string, message: ChatMessage) => void;
   isChatOpen: (orderId: string) => boolean;
   markAsRead: (orderId: string) => void;
   addUnreadMessage: (info: UnreadMessageInfo) => void;
@@ -78,13 +80,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const existingIndex = sessions.findIndex(s => s.orderId === session.orderId);
     
     if (existingIndex !== -1) {
-      // Focus existing chat and mark as read
+      // Focus existing chat, mark as read, and refresh messages if new ones are provided
       const updatedSessions = [...sessions];
       updatedSessions[existingIndex] = {
         ...updatedSessions[existingIndex],
         isMinimized: false,
         zIndex: maxZIndex + 1,
         unreadCount: 0,
+        // Update messages only if the caller passes a non-empty array
+        ...(session.messages && session.messages.length > 0
+          ? { messages: session.messages }
+          : {}),
       };
       // Remove from unread orders
       const newUnreadOrders = unreadOrders.filter(u => u.orderId !== session.orderId);
@@ -184,9 +190,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   updateChatMessages: (id, messages) => {
     set((state) => ({
-      sessions: state.sessions.map(s => 
+      sessions: state.sessions.map(s =>
         s.id === id ? { ...s, messages } : s
       ),
+    }));
+  },
+
+  appendChatMessage: (orderId, message) => {
+    set((state) => ({
+      sessions: state.sessions.map(s => {
+        if (s.orderId !== orderId) return s;
+        // Avoid duplicate messages (same _id or same timestamp+sender)
+        const alreadyExists = s.messages.some(m => {
+          if (message._id && m._id) return m._id === message._id;
+          const mSender = typeof m.senderId === 'string' ? m.senderId : m.senderId._id;
+          const newSender = typeof message.senderId === 'string' ? message.senderId : message.senderId._id;
+          return mSender === newSender && m.timestamp === message.timestamp;
+        });
+        if (alreadyExists) return s;
+        return { ...s, messages: [...s.messages, message] };
+      }),
     }));
   },
 

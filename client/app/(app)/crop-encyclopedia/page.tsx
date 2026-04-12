@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BookOpen, Leaf, Bug, Sprout,
   Sun, Droplets, Thermometer, Calendar,
-  ChevronRight, Search
+  ChevronRight
 } from 'lucide-react';
 import { cropEncyclopediaApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +18,7 @@ import PestManagement from '@/components/encyclopedia/PestManagement';
 import AICropSearch from '@/components/encyclopedia/AICropSearch';
 import CropDetailView from '@/components/encyclopedia/CropDetailView';
 
+// Category configuration for crops
 const categoryIcons: Record<string, any> = {
   'cereal': Sprout,
   'vegetable': Leaf,
@@ -35,46 +36,6 @@ const categoryColors: Record<string, string> = {
   'oilseed': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   'spice': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
-
-// Mock data for demonstration - in production, this would come from API
-const mockPlantingGuide = {
-  soilType: 'Well-drained loamy soil',
-  phRange: '6.0 - 7.5',
-  sowingDepth: '3-5 cm',
-  spacing: '20-25 cm between rows',
-  waterFrequency: 'Every 7-10 days',
-  sunlight: 'Full sun (6-8 hours)',
-  temperature: '20-30°C',
-};
-
-const mockSeasonCalendar = {
-  sowingMonths: [5, 6], // June, July
-  growingMonths: [6, 7, 8, 9], // July-Oct
-  harvestMonths: [10, 11], // Nov-Dec
-};
-
-const mockPests = [
-  {
-    id: '1',
-    name: 'Aphids',
-    scientificName: 'Aphidoidea',
-    description: 'Small sap-sucking insects that can cause significant damage to crops by feeding on plant juices.',
-    symptoms: ['Yellowing leaves', 'Stunted growth', 'Sticky honeydew on leaves', 'Sooty mold development'],
-    organicSolution: 'Neem oil spray (5ml per liter of water) or introduce ladybugs as natural predators.',
-    chemicalSolution: 'Imidacloprid 17.8% SL @ 0.3ml per liter of water.',
-    severity: 'medium' as const,
-  },
-  {
-    id: '2',
-    name: 'Stem Borer',
-    scientificName: 'Scirpophaga excerptalis',
-    description: 'Larvae bore into stems causing dead hearts and affecting yield significantly.',
-    symptoms: ['Dead heart in young plants', 'Bored stems with excreta', 'Wilting of central shoot'],
-    organicSolution: 'Release Trichogramma chilonis parasitoids @ 50,000/ha or use pheromone traps.',
-    chemicalSolution: 'Chlorpyriphos 20% EC @ 2ml per liter of water.',
-    severity: 'high' as const,
-  },
-];
 
 export default function CropEncyclopediaPage() {
   const { t, language } = useLanguageStore();
@@ -255,7 +216,26 @@ export default function CropEncyclopediaPage() {
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4">
                 {t('encyclo.plantingGuide')}
               </h2>
-              <PlantingGuide {...mockPlantingGuide} />
+              <PlantingGuide 
+                soilType={selectedCrop.soilType || 'Well-drained loamy soil with good organic matter'}
+                phRange={selectedCrop.phRange || '6.0 - 7.5'}
+                sowingDepth={selectedCrop.sowingDepth || '3-5 cm'}
+                spacing={selectedCrop.spacing || '20-25 cm between rows'}
+                waterFrequency={selectedCrop.waterFrequency || 'Every 7-10 days depending on soil moisture'}
+                sunlight={selectedCrop.sunlight || 'Full sun (6-8 hours daily)'}
+                temperature={selectedCrop.temperatureRange || '20-30°C'}
+                fertilizers={selectedCrop.fertilizers || [
+                  { name: 'NPK 10-26-26', timing: 'At sowing', amount: '50 kg/ha' },
+                  { name: 'Urea', timing: '30 days after sowing', amount: '25 kg/ha' },
+                  { name: 'DAP', timing: 'At flowering', amount: '30 kg/ha' }
+                ]}
+                growthStages={selectedCrop.growthStages || [
+                  { stage: 'Germination', duration: '7-10 days', description: 'Seeds sprout and first leaves appear' },
+                  { stage: 'Vegetative', duration: '30-45 days', description: 'Plant develops leaves and stems' },
+                  { stage: 'Flowering', duration: '15-20 days', description: 'Flowers bloom and pollination occurs' },
+                  { stage: 'Maturity', duration: '20-30 days', description: 'Seeds/grains develop and ripen' }
+                ]}
+              />
             </motion.div>
           )}
 
@@ -267,7 +247,13 @@ export default function CropEncyclopediaPage() {
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4">
                 {t('encyclo.seasonCalendar')}
               </h2>
-              <SeasonCalendar {...mockSeasonCalendar} />
+              <SeasonCalendar 
+                sowingMonths={selectedCrop.sowingMonths || [5, 6]}
+                growingMonths={selectedCrop.growingMonths || [6, 7, 8, 9]}
+                harvestMonths={selectedCrop.harvestMonths || [10, 11]}
+                bestVarieties={selectedCrop.varieties || ['Local Variety', 'High Yield Variety']}
+                season={selectedCrop.season || 'Kharif'}
+              />
             </motion.div>
           )}
 
@@ -279,7 +265,42 @@ export default function CropEncyclopediaPage() {
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4">
                 {t('encyclo.pestDisease')}
               </h2>
-              <PestManagement pests={mockPests} />
+              <PestManagement 
+                pests={selectedCrop.pests || [
+                  {
+                    id: '1',
+                    name: 'Aphids',
+                    scientificName: 'Aphidoidea',
+                    description: 'Small sap-sucking insects that cause yellowing leaves and stunted growth.',
+                    symptoms: ['Yellowing leaves', 'Stunted growth', 'Sticky honeydew on leaves', 'Sooty mold development'],
+                    organicSolution: 'Neem oil spray (5ml per liter) or introduce ladybugs as natural predators.',
+                    chemicalSolution: 'Imidacloprid 17.8% SL @ 0.3ml per liter of water.',
+                    severity: 'medium' as const,
+                  },
+                  {
+                    id: '2',
+                    name: 'Stem Borer',
+                    scientificName: 'Scirpophaga excerptalis',
+                    description: 'Larvae bore into stems causing dead hearts and yield loss.',
+                    symptoms: ['Dead heart in young plants', 'Bored stems with excreta', 'Wilting of central shoot'],
+                    organicSolution: 'Release Trichogramma parasitoids @ 50,000/ha or use pheromone traps.',
+                    chemicalSolution: 'Chlorpyriphos 20% EC @ 2ml per liter of water.',
+                    severity: 'high' as const,
+                  },
+                ]}
+                diseases={selectedCrop.diseases || [
+                  {
+                    id: '1',
+                    name: 'Leaf Blight',
+                    scientificName: 'Helminthosporium oryzae',
+                    description: 'Fungal disease causing brown spots on leaves.',
+                    symptoms: ['Brown oval spots', 'Yellowing of leaves', 'Premature drying'],
+                    organicSolution: 'Remove infected plant debris, ensure proper drainage.',
+                    chemicalSolution: 'Mancozeb 75% WP @ 2g per liter of water.',
+                    severity: 'medium' as const,
+                  }
+                ]}
+              />
             </motion.div>
           )}
         </div>
@@ -304,21 +325,11 @@ export default function CropEncyclopediaPage() {
         </p>
       </div>
 
-      {/* AI Search */}
+      {/* AI Search - Single Search Bar */}
       <AICropSearch onCropFound={setAiCrop} />
 
-      {/* Search & Filters */}
-      <div className="mx-auto max-w-2xl space-y-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder={t('encyclo.search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 pl-12 pr-4 py-3 text-base focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:bg-slate-800 dark:text-white"
-          />
-        </div>
+      {/* Category Filters */}
+      <div className="mx-auto max-w-2xl">
         <div className="flex flex-wrap justify-center gap-2">
           <button
             onClick={() => setSelectedCategory('')}

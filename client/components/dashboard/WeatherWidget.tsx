@@ -1,359 +1,443 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Cloud, Sun, CloudRain, Wind, MapPin, Loader2, ChevronDown, ChevronUp, AlertTriangle, Droplets, ThermometerSun, Clock } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  Cloud, Sun, CloudRain, Wind, MapPin, Loader2, ChevronDown, ChevronUp, 
+  AlertTriangle, Droplets, ThermometerSun, Clock, CloudSnow, CloudLightning, 
+  CloudFog, Search, Eye, Gauge, Thermometer
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useUserProfile } from '@/hooks/useUser';
+import { cn } from '@/lib/utils';
+import { getWeatherAnimation, getWeatherCardGradient } from '@/components/weather/WeatherAnimations';
+import LocationPicker from '@/components/location/LocationPicker';
+import { weatherApi } from '@/lib/api';
+import { toast } from 'sonner';
 
-interface WeatherData {
+interface CurrentWeather {
   temperature: number;
-  windspeed: number;
-  weathercode: number;
-  is_day: number;
-  time: string;
+  humidity: number;
+  windspeed?: number;
+  windSpeed?: number;
+  rainfall: number;
+  condition: string;
+  icon: string;
+  uvIndex: number;
+  feelsLike: number;
+  pressure: number;
+  visibility: number;
+  lastUpdated: string;
 }
 
-interface HourlyData {
-  time: string[];
-  temperature_2m: number[];
-  relativehumidity_2m: number[];
+interface ForecastDay {
+  date: string;
+  temperature: {
+    min: number;
+    max: number;
+    avg: number;
+  };
+  humidity: number;
+  rainfall: number;
+  windSpeed: number;
+  condition: string;
+  icon: string;
+  uvIndex: number;
+  precipitationProbability: number;
+}
+
+interface WeatherData {
+  current: CurrentWeather;
+  forecast: ForecastDay[];
+  location: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+  alerts: Array<{
+    type: string;
+    severity: string;
+    title: string;
+    description: string;
+  }>;
 }
 
 interface WeatherWidgetProps {
   crops?: any[];
 }
 
+// Map condition names to display text
+const getConditionDisplay = (condition: string): string => {
+  const conditionMap: Record<string, string> = {
+    'Clear': 'Clear sky',
+    'Clouds': 'Cloudy',
+    'Rain': 'Rain',
+    'Drizzle': 'Drizzle',
+    'Thunderstorm': 'Thunderstorm',
+    'Snow': 'Snow',
+    'Mist': 'Foggy',
+    'Haze': 'Hazy',
+  };
+  return conditionMap[condition] || condition;
+};
+
+const translations = {
+  en: {
+    clear: 'Clear sky', cloudy: 'Partly cloudy', fog: 'Foggy', rain: 'Rain / Drizzle',
+    snow: 'Snow fall', storm: 'Thunderstorm', unavail: 'Weather data unavailable',
+    alerts: 'Weather Alerts', cropImpact: 'Crop Impact', noCrops: 'Add crops to view impacts.',
+    stable: 'Stable', needsWater: 'Needs Water', optimal: 'Optimal conditions.',
+    highTemp: 'High temperature alert. Ensure adequate irrigation.',
+    heavyRain: 'Heavy rain forecasted. Halt pesticide spraying.',
+    highWind: 'High winds detected. Watch for crop damage.',
+    hourly: "Today's Forecast", farmerSuggestion: 'Farmer Suggestion',
+    suggClear: 'Great day to apply fertilizers or prepare soil.',
+    suggRain: 'Delay chemical sprays. Check drainage channels.',
+    windSpeed: 'km/h', humidity: 'Humidity', pressure: 'Pressure', visibility: 'Visibility',
+    setLocation: 'Set Your Location', setLocationDesc: 'Set your farm location to get accurate weather forecasts.',
+    searchLocation: 'Search Location',
+    feelsLike: 'Feels like',
+    lastUpdated: 'Last updated',
+  },
+  hi: {
+    clear: 'साफ आसमान', cloudy: 'आंशिक बादल', fog: 'कोहरा', rain: 'बारिश',
+    snow: 'बर्फबारी', storm: 'आंधी तूफान', unavail: 'मौसम डेटा अनुपलब्ध',
+    alerts: 'मौसम चेतावनी', cropImpact: 'फसल प्रभाव', noCrops: 'फसलें जोड़ें।',
+    stable: 'स्थिर', needsWater: 'पानी चाहिए', optimal: 'अनुकूल मौसम।',
+    highTemp: 'उच्च तापमान चेतावनी। पर्याप्त सिंचाई सुनिश्चित करें।',
+    heavyRain: 'भारी बारिश का अनुमान। कीटनाशक छिड़काव रोकें।',
+    highWind: 'तेज हवाएं। फसलों को नुकसान से बचाएं।',
+    hourly: 'आज का पूर्वानुमान', farmerSuggestion: 'किसान सुझाव',
+    suggClear: 'उर्वरक डालने के लिए बढ़िया दिन।',
+    suggRain: 'रासायनिक छिड़काव में देरी करें।',
+    windSpeed: 'किमी/घंटा', humidity: 'आर्द्रता', pressure: 'दबाव', visibility: 'दृश्यता',
+    setLocation: 'स्थान सेट करें', setLocationDesc: 'सटीक मौसम पूर्वानुमान के लिए अपने खेत का स्थान सेट करें।',
+    searchLocation: 'स्थान खोजें',
+    feelsLike: 'महसूस होता है',
+    lastUpdated: 'अंतिम अपडेट',
+  },
+  mr: {
+    clear: 'निरभ्र आकाश', cloudy: 'अंशतः ढगाळ', fog: 'धुके', rain: 'पाऊस',
+    snow: 'हिमवर्षाव', storm: 'वादळ', unavail: 'हवामान डेटा उपलब्ध नाही',
+    alerts: 'हवामान सूचना', cropImpact: 'पीक प्रभाव', noCrops: 'पिके जोडा.',
+    stable: 'स्थिर', needsWater: 'पाण्याची गरज', optimal: 'अनुकूल हवामान.',
+    highTemp: 'उच्च तापमान! योग्य सिंचन सुनिश्चित करा.',
+    heavyRain: 'मुसळधार पाऊस. कीटकनाशक फवारणी थांबवा.',
+    highWind: 'सोसाट्याचा वारा. पिकांचे संरक्षण करा.',
+    hourly: 'आजचा अंदाज', farmerSuggestion: 'शेतकरी सल्ला',
+    suggClear: 'खते देण्यासाठी उत्तम दिवस.',
+    suggRain: 'फवारणी पुढे ढकला.',
+    windSpeed: 'किमी/तास', humidity: 'आर्द्रता', pressure: 'दाब', visibility: 'दृश्यता',
+    setLocation: 'स्थान सेट करा', setLocationDesc: 'अचूक हवामान अंदाजासाठी तुमचे शेत स्थान सेट करा.',
+    searchLocation: 'स्थान शोधा',
+    feelsLike: 'जाणवते',
+    lastUpdated: 'शेवटचे अपडेट',
+  }
+};
+
 export default function WeatherWidget({ crops = [] }: WeatherWidgetProps) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [hourly, setHourly] = useState<HourlyData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [locationName, setLocationName] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [sessionLocation, setSessionLocation] = useState<{ lat: number, lng: number, address: string } | null>(null);
   
   const { language } = useLanguageStore();
   const { data: profile } = useUserProfile();
+  const t = (key: keyof typeof translations.en) => translations[language as keyof typeof translations]?.[key] || translations.en[key];
 
   useEffect(() => {
-    const fetchWeather = async (lat: number, lon: number, locationLabel?: string) => {
+    const saved = localStorage.getItem('agrivision_session_location');
+    if (saved) {
       try {
-        // Use provided location label or reverse geocode
-        if (locationLabel) {
-          setLocationName(locationLabel);
-        } else {
-          // Reverse Geocode (Simple OpenStreetMap)
-          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
-            .then(r => r.json())
-            .then(d => {
-              const addr = d.address;
-              const city = addr.city || addr.town || addr.village || addr.suburb || addr.state_district;
-              if (city) setLocationName(city);
-            }).catch(() => {});
+        setSessionLocation(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved location', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        setLoading(true);
+        
+        // Use session location or profile location
+        const latitude = sessionLocation?.lat || profile?.farmLocation?.lat;
+        const longitude = sessionLocation?.lng || profile?.farmLocation?.lng;
+
+        if (!latitude || !longitude) {
+          setLoading(false);
+          return;
         }
 
-        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,relativehumidity_2m`);
-        const data = await res.json();
-        if (data.current_weather) {
-          setWeather(data.current_weather);
-          setHourly(data.hourly);
+        // If we have a session location, update the weather location first
+        if (sessionLocation) {
+          try {
+            await weatherApi.updateLocation({
+              lat: sessionLocation.lat,
+              lng: sessionLocation.lng,
+              address: sessionLocation.address,
+            });
+          } catch (e) {
+            console.log('Could not update weather location, using cached data');
+          }
         }
+
+        // Fetch weather from backend API
+        const response = await weatherApi.getWeather();
+        const weatherData = response.data.data.weather;
+        
+        setWeather(weatherData);
       } catch (error) {
         console.error('Failed to fetch weather:', error);
+        toast.error('Failed to fetch weather data');
       } finally {
         setLoading(false);
       }
     };
 
-    // Use user's farmLocation from profile if available
-    if (profile?.farmLocation?.lat && profile?.farmLocation?.lng) {
-      const locationLabel = profile.farmLocation.address || 
-                           (profile.village ? `${profile.village}, ${profile.district || ''}` : '') ||
-                           (profile.district ? profile.district : '');
-      fetchWeather(profile.farmLocation.lat, profile.farmLocation.lng, locationLabel);
+    if (sessionLocation || profile?.farmLocation?.lat) {
+      fetchWeather();
     } else {
-      // Fallback to browser geolocation if no profile location
-      const detectLoc = () => {
-        if (language === 'hi') setLocationName('स्थान का पता लगा रहा है...');
-        else if (language === 'mr') setLocationName('स्थान शोधत आहे...');
-        else setLocationName('Detecting location...');
-      };
-      detectLoc();
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            const { latitude, longitude } = position.coords;
-            if (language === 'hi') setLocationName('वर्तमान स्थान');
-            else if (language === 'mr') setLocationName('सध्याचे स्थान');
-            else setLocationName('Current Location');
-            fetchWeather(latitude, longitude);
-          },
-          () => {
-            setLocationName('New Delhi, India');
-            fetchWeather(28.6139, 77.2090);
-          }
-        );
-      } else {
-        setLocationName('New Delhi, India');
-        fetchWeather(28.6139, 77.2090);
-      }
+      setLoading(false);
     }
-  }, [language, profile]);
+  }, [profile, sessionLocation]);
 
-  const getWeatherIcon = (code: number) => {
-    if (code === 0) return <Sun className="h-10 w-10 text-amber-500" />;
-    if (code >= 1 && code <= 3) return <Cloud className="h-10 w-10 text-slate-400 dark:text-slate-200" />;
-    if (code >= 51 && code <= 99) return <CloudRain className="h-10 w-10 text-blue-500" />;
-    return <Cloud className="h-10 w-10 text-slate-400" />;
-  };
-
-  const translations = {
-    en: {
-      clear: 'Clear sky',
-      cloudy: 'Partly cloudy',
-      fog: 'Foggy',
-      rain: 'Rain / Drizzle',
-      snow: 'Snow fall',
-      storm: 'Thunderstorm',
-      unavail: 'Weather data unavailable',
-      alerts: 'Weather Alerts & Advisory',
-      cropImpact: 'Crop Impact Analysis',
-      noCrops: 'Add crops to your farm to view personalized weather impacts.',
-      stable: 'Stable',
-      needsWater: 'Needs Water',
-      optimal: 'Optimal weather conditions. Routine farming activities are safe.',
-      highTemp: 'High temperature alert. Ensure adequate irrigation for heat-sensitive crops.',
-      heavyRain: 'Heavy rain forecasted. Halt pesticide/fungicide spraying to prevent wash-off.',
-      highWind: 'High winds detected. Watch for physical damage to tall crops.',
-      hourly: 'Today\'s Forecast',
-      farmerSuggestion: 'Farmer Suggestion',
-      suggClear: 'Great day to apply fertilizers or prepare the soil.',
-      suggRain: 'Delay chemical sprays. Check drainage channels in the field.',
-      windSpeed: 'km/h',
-    },
-    hi: {
-      clear: 'साफ आसमान',
-      cloudy: 'आंशिक रूप से बादल',
-      fog: 'कोहरा',
-      rain: 'बारिश / बूंदाबांदी',
-      snow: 'बर्फबारी',
-      storm: 'आंधी तूफान',
-      unavail: 'मौसम डेटा अनुपलब्ध',
-      alerts: 'मौसम चेतावनी और सलाह',
-      cropImpact: 'फसल प्रभाव विश्लेषण',
-      noCrops: 'व्यक्तिगत मौसम प्रभाव देखने के लिए अपने खेत में फसलें जोड़ें।',
-      stable: 'स्थिर',
-      needsWater: 'पानी चाहिए',
-      optimal: 'अनुकूल मौसम। सामान्य खेती की गतिविधियाँ सुरक्षित हैं।',
-      highTemp: 'उच्च तापमान चेतावनी। गर्मी के प्रति संवेदनशील फसलों के लिए पर्याप्त सिंचाई सुनिश्चित करें।',
-      heavyRain: 'भारी बारिश का अनुमान। कीटनाशक छिड़काव रोक दें।',
-      highWind: 'तेज हवाएं। लंबी फसलों को संभावित नुकसान से बचाएं।',
-      hourly: 'आज का पूर्वानुमान',
-      farmerSuggestion: 'किसान के लिए सुझाव',
-      suggClear: 'उर्वरक डालने या मिट्टी तैयार करने के लिए बढ़िया दिन है।',
-      suggRain: 'रासायनिक छिड़काव में देरी करें। खेत में जलनिकासी की जांच करें।',
-      windSpeed: 'किमी/घंटा',
-    },
-    mr: {
-      clear: 'निरभ्र आकाश',
-      cloudy: 'अंशतः ढगाळ',
-      fog: 'धुके',
-      rain: 'पाऊस / रिमझिम',
-      snow: 'हिमवर्षाव',
-      storm: 'वादळ',
-      unavail: 'हवामानाचा डेटा उपलब्ध नाही',
-      alerts: 'हवामान सूचना आणि सल्ला',
-      cropImpact: 'पीक प्रभाव विश्लेषण',
-      noCrops: 'वैयक्तिक हवामान प्रभाव पाहण्यासाठी तुमच्या शेतात पिके जोडा.',
-      stable: 'स्थिर',
-      needsWater: 'पाण्याची गरज',
-      optimal: 'अनुकूल हवामान. दैनंदिन शेतीची कामे सुरक्षित आहेत.',
-      highTemp: 'उच्च तापमान! उष्णतेला संवेदनशील पिकांसाठी योग्य सिंचन सुनिश्चित करा.',
-      heavyRain: 'मुसळधार पावसाचा अंदाज. कीटकनाशकांची फवारणी थांबवा.',
-      highWind: 'सोसाट्याचा वारा. उंच पिकांचे संरक्षण करा.',
-      hourly: 'आजचा अंदाज',
-      farmerSuggestion: 'शेतकऱ्यांसाठी सल्ला',
-      suggClear: 'खते देण्यासाठी किंवा मातीची तयारी करण्यासाठी उत्तम दिवस.',
-      suggRain: 'फवारणी पुढे ढकला. शेतातील पाण्याचा निचरा तपासा.',
-      windSpeed: 'किमी/तास',
+  const handleLocationSelect = async (location: {
+    lat: number; lng: number; address: string;
+    village?: string; taluka?: string; district?: string; state?: string; pincode?: string;
+  }) => {
+    const newLoc = { lat: location.lat, lng: location.lng, address: location.address };
+    setSessionLocation(newLoc);
+    localStorage.setItem('agrivision_session_location', JSON.stringify(newLoc));
+    
+    // Update weather location on backend
+    try {
+      await weatherApi.updateLocation(newLoc);
+      toast.success('Location updated! Fetching weather data...');
+      // Trigger a re-fetch
+      setWeather(null);
+    } catch (error) {
+      toast.error('Failed to update location');
     }
-  };
-
-  const t = (key: keyof typeof translations.en) => translations[language as keyof typeof translations]?.[key] || translations.en[key];
-
-  const getWeatherDesc = (code: number) => {
-    if (code === 0) return t('clear');
-    if (code >= 1 && code <= 3) return t('cloudy');
-    if (code >= 45 && code <= 48) return t('fog');
-    if (code >= 51 && code <= 67) return t('rain');
-    if (code >= 71 && code <= 77) return t('snow');
-    if (code >= 95 && code <= 99) return t('storm');
-    return t('cloudy');
   };
 
   const getAlerts = () => {
     if (!weather) return [];
     const alerts = [];
-    if (weather.temperature > 35) {
-      alerts.push({ type: 'danger', icon: <ThermometerSun className="h-4 w-4 text-red-500" />, text: t('highTemp') });
+    if (weather.current.temperature > 35) {
+      alerts.push({ type: 'danger', icon: <ThermometerSun className="h-4 w-4 text-red-400" />, text: t('highTemp') });
     }
-    if (weather.weathercode >= 61 && weather.weathercode <= 99) {
-      alerts.push({ type: 'warning', icon: <Droplets className="h-4 w-4 text-amber-500" />, text: t('heavyRain') });
+    if (weather.current.condition === 'Rain' || weather.current.condition === 'Thunderstorm') {
+      alerts.push({ type: 'warning', icon: <Droplets className="h-4 w-4 text-amber-400" />, text: t('heavyRain') });
     }
-    if (weather.windspeed > 30) {
-      alerts.push({ type: 'warning', icon: <Wind className="h-4 w-4 text-amber-500" />, text: t('highWind') });
+    if (weather.current.windSpeed > 30) {
+      alerts.push({ type: 'warning', icon: <Wind className="h-4 w-4 text-amber-400" />, text: t('highWind') });
     }
     return alerts;
   };
 
-  const getNextFewHours = () => {
-    if (!hourly || !weather) return [];
-    const currentIndex = hourly.time.findIndex(t_str => t_str.startsWith(weather.time.substring(0, 13)));
-    if (currentIndex === -1) return [];
-    
-    // Get next 12 hours
-    const nextHours = [];
-    for(let i=1; i<=12; i++) {
-       if (hourly.time[currentIndex+i]) {
-         const d = new Date(hourly.time[currentIndex+i]);
-         const formattedTime = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-         nextHours.push({
-           time: formattedTime,
-           temp: Math.round(hourly.temperature_2m[currentIndex+i])
-         });
-       }
-    }
-    return nextHours;
-  };
-
   const alerts = getAlerts();
-  const nextHours = getNextFewHours();
+  const condition = weather?.current?.condition ? getConditionDisplay(weather.current.condition) : 'Clear sky';
+  const locationName = weather?.location?.address || sessionLocation?.address || profile?.farmLocation?.address || '';
+  
+  // Get today's forecast from the forecast array
+  const todayForecast = weather?.forecast?.[0];
+
+  if (!loading && !locationName) {
+    return (
+      <div className="w-full bg-gradient-to-br from-blue-50 to-sky-100 dark:from-slate-900 dark:to-slate-800 border border-blue-200 dark:border-slate-700 rounded-2xl p-8">
+        <div className="text-center">
+          <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+            <MapPin className="h-8 w-8 text-blue-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">{t('setLocation')}</h3>
+          <p className="text-slate-600 dark:text-slate-400 mb-4 max-w-sm mx-auto">{t('setLocationDesc')}</p>
+          <button
+            onClick={() => setShowLocationPicker(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors mx-auto"
+          >
+            <Search className="h-4 w-4" />
+            {t('searchLocation')}
+          </button>
+        </div>
+        <LocationPicker isOpen={showLocationPicker} onClose={() => setShowLocationPicker(false)} onSelect={handleLocationSelect} />
+      </div>
+    );
+  }
 
   return (
-    <Card className="w-full bg-gradient-to-br from-blue-50 to-sky-100 dark:from-slate-900 dark:to-slate-800 border-blue-200 dark:border-slate-700 overflow-hidden cursor-pointer" onClick={() => setExpanded(!expanded)}>
-      <CardHeader className="py-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold flex items-center gap-1.5 text-blue-900 dark:text-blue-100">
-            <MapPin className="h-4 w-4" /> {locationName}
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {alerts.length > 0 && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                <AlertTriangle className="h-3 w-3" /> {alerts.length}
-              </span>
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn("w-full rounded-2xl overflow-hidden shadow-xl transition-all duration-500 bg-gradient-to-br", getWeatherCardGradient(condition))}
+      >
+        <div className="relative">
+          <div className="absolute inset-0 bg-white/10 backdrop-blur-sm" />
+          
+          {/* Header */}
+          <div className="relative p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-white/90">
+              <MapPin className="h-4 w-4" />
+              <span className="text-sm font-medium truncate max-w-[200px]">{locationName}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowLocationPicker(true)} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors" title="Change location">
+                <Search className="h-3.5 w-3.5 text-white" />
+              </button>
+              {alerts.length > 0 && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-amber-900 bg-amber-300 px-2 py-0.5 rounded-full">
+                  <AlertTriangle className="h-3 w-3" /> {alerts.length}
+                </span>
+              )}
+              <button onClick={() => setExpanded(!expanded)} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors">
+                {expanded ? <ChevronUp className="h-4 w-4 text-white" /> : <ChevronDown className="h-4 w-4 text-white" />}
+              </button>
+            </div>
+          </div>
+          
+          {/* Main Content */}
+          <div className="relative px-6 pb-6">
+            {loading ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+              </div>
+            ) : weather ? (
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-5">
+                  <div className="w-20 h-20 md:w-24 md:h-24">
+                    {getWeatherAnimation(condition, 'w-full h-full')}
+                  </div>
+                  <div className="text-center md:text-left">
+                    <p className="text-5xl md:text-6xl font-bold text-white tracking-tight">{Math.round(weather.current.temperature)}°</p>
+                    <p className="text-lg text-white/90 font-medium">{condition}</p>
+                    <p className="text-sm text-white/70">{t('feelsLike')} {Math.round(weather.current.feelsLike)}°</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { icon: Droplets, value: `${weather.current.humidity}%`, label: t('humidity') },
+                    { icon: Wind, value: `${Math.round(weather.current.windSpeed)} km/h`, label: t('windSpeed') },
+                    { icon: Gauge, value: `${Math.round(weather.current.pressure)} hPa`, label: t('pressure') },
+                    { icon: Eye, value: `${weather.current.visibility.toFixed(1)} km`, label: t('visibility') },
+                  ].map((item, idx) => (
+                    <div key={idx} className="text-center p-2 rounded-xl bg-white/10 backdrop-blur-sm">
+                      <item.icon className="h-4 w-4 mx-auto mb-1 text-white/70" />
+                      <p className="text-sm font-semibold text-white">{item.value}</p>
+                      <p className="text-[10px] text-white/60">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-white/70">{t('unavail')}</p>
             )}
-            {expanded ? <ChevronUp className="h-5 w-5 text-slate-500 dark:text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-500 dark:text-slate-400" />}
           </div>
         </div>
-      </CardHeader>
-      
-      <CardContent>
-        {loading ? (
-          <div className="flex items-center justify-center h-16">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
-          </div>
-        ) : weather ? (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {getWeatherIcon(weather.weathercode)}
-              <div>
-                <p className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-                  {weather.temperature}°C
-                </p>
-                <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                  {getWeatherDesc(weather.weathercode)}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300 font-medium justify-end">
-                <Wind className="h-4 w-4" />
-                <span>{weather.windspeed} {t('windSpeed')}</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('unavail')}</p>
-        )}
-
+        
+        {/* Expanded Content */}
         <AnimatePresence>
           {expanded && weather && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden border-t border-blue-200/50 dark:border-slate-700 mt-4 pt-4"
+              className="bg-white/10 backdrop-blur-md border-t border-white/20"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Column 1: Hourly Forecast */}
-                <div className="border border-indigo-100 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 rounded-xl p-3">
-                  <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <div className="p-4 space-y-4">
+                {/* Today's Forecast Hours */}
+                <div>
+                  <h4 className="text-xs font-bold text-white/70 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5" /> {t('hourly')}
                   </h4>
-                  <div className="flex justify-between items-center text-center gap-2 overflow-x-auto pb-2">
-                    {nextHours.map((hr, idx) => (
-                      <div key={idx} className="min-w-[50px] flex flex-col items-center">
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">{hr.time}</span>
-                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-1">{hr.temp}°</span>
-                      </div>
-                    ))}
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {/* Show today's forecast details */}
+                    {todayForecast && (
+                      <>
+                        <div className="min-w-[60px] flex flex-col items-center p-2 rounded-lg bg-white/10">
+                          <span className="text-[10px] text-white/60">Now</span>
+                          <span className="text-sm font-bold text-white mt-1">{Math.round(weather.current.temperature)}°</span>
+                        </div>
+                        <div className="min-w-[60px] flex flex-col items-center p-2 rounded-lg bg-white/10">
+                          <span className="text-[10px] text-white/60">Min</span>
+                          <span className="text-sm font-bold text-white mt-1">{Math.round(todayForecast.temperature.min)}°</span>
+                        </div>
+                        <div className="min-w-[60px] flex flex-col items-center p-2 rounded-lg bg-white/10">
+                          <span className="text-[10px] text-white/60">Max</span>
+                          <span className="text-sm font-bold text-white mt-1">{Math.round(todayForecast.temperature.max)}°</span>
+                        </div>
+                        <div className="min-w-[60px] flex flex-col items-center p-2 rounded-lg bg-white/10">
+                          <span className="text-[10px] text-white/60">Rain</span>
+                          <span className="text-sm font-bold text-white mt-1">{todayForecast.precipitationProbability}%</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Column 2: Alerts & Suggestion */}
-                <div className="col-span-1 lg:col-span-1 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('farmerSuggestion')}</h4>
-                  
-                  {/* Smart suggestion based on weather code */}
-                  <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 rounded-lg shadow-sm">
-                    <p className="text-[11px] font-medium leading-relaxed text-blue-800 dark:text-blue-100">
-                      {weather.weathercode >= 60 ? t('suggRain') : t('suggClear')}
+                {/* Alerts & Suggestions */}
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-white/10">
+                    <h4 className="text-xs font-bold text-white/70 uppercase tracking-wider mb-2">{t('farmerSuggestion')}</h4>
+                    <p className="text-xs text-white/90 leading-relaxed">
+                      {weather.current.condition === 'Rain' || weather.current.condition === 'Thunderstorm' 
+                        ? t('suggRain') 
+                        : t('suggClear')}
                     </p>
                   </div>
                   
-                  {alerts.length > 0 ? (
-                    <div className="space-y-2">
-                      {alerts.map((alert, idx) => (
-                        <div key={idx} className={`p-2 rounded-lg border flex gap-2 items-start shadow-sm ${alert.type === 'danger' ? 'bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800 text-red-800 dark:text-red-200' : 'bg-amber-50 dark:bg-amber-900/30 border-amber-100 dark:border-amber-800 text-amber-800 dark:text-amber-200'}`}>
-                          <div className="mt-0.5">{alert.icon}</div>
-                          <p className="text-[11px] leading-relaxed font-medium">{alert.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 rounded-lg flex items-center gap-2 shadow-sm">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <p className="text-[11px] text-emerald-800 dark:text-emerald-200 font-medium">{t('optimal')}</p>
-                    </div>
-                  )}
+                  <div className="p-3 rounded-xl bg-white/10">
+                    <h4 className="text-xs font-bold text-white/70 uppercase tracking-wider mb-2">{t('alerts')}</h4>
+                    {alerts.length > 0 ? (
+                      <div className="space-y-2">
+                        {alerts.map((alert, idx) => (
+                          <div key={idx} className="flex gap-2 items-start">
+                            <div className="mt-0.5">{alert.icon}</div>
+                            <p className="text-xs text-white/90">{alert.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <p className="text-xs text-white/90">{t('optimal')}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Column 3: Crop Impacts */}
-                <div className="col-span-1">
-                  <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{t('cropImpact')}</h4>
-                  {crops.length > 0 ? (
-                    <ul className="space-y-2">
-                      {crops.slice(0, 3).map((crop, i) => (
-                        <li key={i} className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 p-2 rounded-lg border border-slate-100 dark:border-slate-700 shadow-sm">
-                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{crop.name}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${weather.temperature > 30 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
-                            {weather.temperature > 30 ? t('needsWater') : t('stable')}
-                          </span>
-                        </li>
+                {/* Crop Impact */}
+                {crops.length > 0 && (
+                  <div className="p-3 rounded-xl bg-white/10">
+                    <h4 className="text-xs font-bold text-white/70 uppercase tracking-wider mb-2">{t('cropImpact')}</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {crops.slice(0, 5).map((crop, i) => (
+                        <span key={i} className={`text-[10px] px-2 py-1 rounded-full font-medium ${weather.current.temperature > 30 ? 'bg-blue-500/30 text-blue-100' : 'bg-emerald-500/30 text-emerald-100'}`}>
+                          {crop.name}: {weather.current.temperature > 30 ? t('needsWater') : t('stable')}
+                        </span>
                       ))}
-                    </ul>
-                  ) : (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">{t('noCrops')}</p>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                )}
 
+                {/* Last Updated */}
+                {weather.current.lastUpdated && (
+                  <div className="text-center">
+                    <span className="text-[10px] text-white/50">
+                      {t('lastUpdated')}: {new Date(weather.current.lastUpdated).toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </CardContent>
-    </Card>
+      </motion.div>
+
+      <LocationPicker isOpen={showLocationPicker} onClose={() => setShowLocationPicker(false)} onSelect={handleLocationSelect} initialLocation={sessionLocation || undefined} />
+    </>
   );
 }

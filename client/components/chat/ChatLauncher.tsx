@@ -29,9 +29,10 @@ export default function ChatLauncher() {
 
   const orders = ordersData?.orders || [];
   
-  // Active orders (pending, confirmed, processing, shipped) that can be chatted about
-  const activeOrders = orders.filter((o: any) => 
-    ['pending', 'confirmed', 'processing', 'shipped'].includes(o.status)
+  // Active orders that can be chatted about (all non-terminal B2B statuses)
+  const activeOrders = orders.filter((o: any) =>
+    ['pending', 'confirmed', 'processing', 'negotiating', 'deal_confirmed',
+     'ready_for_pickup', 'picked_up', 'in_transit'].includes(o.status)
   );
 
   // Animation effect when new message arrives
@@ -110,18 +111,20 @@ export default function ChatLauncher() {
                         key={unread.orderId}
                         onClick={() => {
                           const order = sortedOrders.find((o: any) => o._id === unread.orderId);
-                          if (order) {
-                            const otherPartyName = userRole === 'FARMER' 
-                              ? (order as any).buyerId?.name 
-                              : (order as any).farmerId?.name;
-                            openFloatingChat({
-                              orderId: unread.orderId,
-                              orderNumber: unread.orderNumber,
-                              otherPartyName: otherPartyName || unread.otherPartyName,
-                              otherPartyRole: unread.otherPartyRole,
-                              messages: [],
-                            });
-                          }
+                          const otherPartyName = order
+                            ? (userRole === 'FARMER'
+                                ? (order as any).buyerId?.name
+                                : (order as any).farmerId?.name)
+                            : unread.otherPartyName;
+                          openFloatingChat({
+                            orderId: unread.orderId,
+                            orderNumber: unread.orderNumber,
+                            otherPartyName: otherPartyName || unread.otherPartyName,
+                            otherPartyRole: unread.otherPartyRole,
+                            // Pass actual messages so the chat widget shows history
+                            messages: (order as any)?.messageHistory || [],
+                          });
+                          markAsRead(unread.orderId);
                           setIsExpanded(false);
                         }}
                         className="w-full flex items-center gap-2 p-2 rounded-lg bg-red-100/50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-left"
@@ -193,10 +196,6 @@ export default function ChatLauncher() {
                           {unreadForSession > 0 ? (
                             <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs font-bold">
                               {unreadForSession}
-                            </span>
-                          ) : session.messages.length > 0 ? (
-                            <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs">
-                              {session.messages.length}
                             </span>
                           ) : null}
                         </button>

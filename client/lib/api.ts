@@ -64,6 +64,31 @@ export const ordersApi = {
   sendMessage: (id: string, message: string) =>
     api.post(`/orders/${id}/messages`, { message }),
   getStats: () => api.get('/orders/stats/summary'),
+  // B2B Deal Management
+  confirmDeal: (id: string, notes?: string) =>
+    api.post(`/orders/${id}/confirm-deal`, { notes }),
+  updateProcurement: (id: string, data: Record<string, unknown>) =>
+    api.post(`/orders/${id}/procurement`, data),
+  verifyPickup: (id: string, data: Record<string, unknown>) =>
+    api.post(`/orders/${id}/verify-pickup`, data),
+  markInTransit: (id: string, data?: Record<string, unknown>) =>
+    api.post(`/orders/${id}/mark-in-transit`, data),
+  markDelivered: (id: string, data?: Record<string, unknown>) =>
+    api.post(`/orders/${id}/mark-delivered`, data),
+};
+
+// ─── Negotiations ────────────────────────────────────────────────────────────
+export const negotiationApi = {
+  getAll: (params?: Record<string, unknown>) => api.get('/negotiations', { params }),
+  getById: (id: string) => api.get(`/negotiations/${id}`),
+  create: (data: Record<string, unknown>) => api.post('/negotiations', data),
+  counter: (id: string, data: Record<string, unknown>) =>
+    api.post(`/negotiations/${id}/counter`, data),
+  accept: (id: string) => api.post(`/negotiations/${id}/accept`),
+  reject: (id: string, reason?: string) =>
+    api.post(`/negotiations/${id}/reject`, { reason }),
+  sendMessage: (id: string, message: string) =>
+    api.post(`/negotiations/${id}/message`, { message }),
 };
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
@@ -102,6 +127,16 @@ export const weatherApi = {
   updateLocation: (data: { lat: number; lng: number; address: string }) =>
     api.put('/weather/location', data),
   getRecommendations: () => api.get('/weather/recommendations'),
+};
+
+// ─── Geocoding ─────────────────────────────────────────────────────────────────
+export const geocodeApi = {
+  // Reverse geocode: coordinates to address
+  reverseGeocode: (lat: number, lng: number) =>
+    api.get('/geocode/reverse', { params: { lat, lng } }),
+  // Geocode: address to coordinates
+  geocodeAddress: (address: string) =>
+    api.get('/geocode/geocode', { params: { address } }),
 };
 
 // ─── Market Prices ───────────────────────────────────────────────────────────

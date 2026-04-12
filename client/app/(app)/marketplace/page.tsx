@@ -7,10 +7,11 @@ import {
   Package, Leaf, X, ChevronDown, Loader2,
   CheckCircle2, Info, Map as MapIcon, Globe,
   ShieldCheck, Truck, CreditCard, User, Building,
-  Clock, Clock12, Phone, Mail, Award, Calendar
+  Clock, Clock12, Phone, Mail, Award, Calendar,
+  MessageSquare, IndianRupee
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { inventoryApi, ordersApi } from '@/lib/api';
+import { inventoryApi, ordersApi, negotiationApi } from '@/lib/api';
 import { useAppStore } from '@/store/useAppStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { SkeletonInventoryCard } from '@/components/ui/SkeletonLoaders';
@@ -37,6 +38,9 @@ export default function MarketplacePage() {
   const [search, setSearch] = useState('');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [orderQty, setOrderQty] = useState(1);
+  const [negotiationMode, setNegotiationMode] = useState(false);
+  const [negotiationPrice, setNegotiationPrice] = useState(0);
+  const [negotiationMessage, setNegotiationMessage] = useState('');
   const [shippingAddress, setShippingAddress] = useState({
     street: '',
     city: '',
@@ -90,8 +94,27 @@ export default function MarketplacePage() {
       qc.invalidateQueries({ queryKey: ['orders'] });
       toast.success('Order placed successfully! Farmer has been notified.');
       setSelectedItem(null);
+      setNegotiationMode(false);
     },
     onError: (err: any) => showErrorToast(err, 'Order Failed'),
+  });
+
+  const { mutate: submitNegotiation, isPending: isNegotiating } = useMutation({
+    mutationFn: () => negotiationApi.create({
+      inventoryId: selectedItem!._id,
+      proposedPricePerUnit: negotiationPrice,
+      proposedQuantity: orderQty,
+      message: negotiationMessage,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['negotiations'] });
+      toast.success('Negotiation offer sent! Waiting for farmer response.');
+      setSelectedItem(null);
+      setNegotiationMode(false);
+      setNegotiationPrice(0);
+      setNegotiationMessage('');
+    },
+    onError: (err: any) => showErrorToast(err, 'Negotiation Failed'),
   });
 
   const items = data?.items || [];
@@ -211,21 +234,53 @@ export default function MarketplacePage() {
                </div>
 
                <div className="pt-4 mt-auto">
-                 {user?.role !== 'farmer' ? (
-                   <button 
-                    onClick={() => {
-                        setSelectedItem(item);
-                        setOrderQty(item.minimumOrderQuantity);
-                    }}
-                    className="w-full rounded-2xl bg-emerald-600 py-3.5 text-xs font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2"
-                   >
-                     <ShoppingCart className="h-4 w-4" /> Secure Order
-                   </button>
-                 ) : (
-                    <button disabled className="w-full rounded-2xl bg-slate-100 dark:bg-slate-800 py-3.5 text-xs font-bold text-slate-400 cursor-not-allowed">
-                       Farmer View Active
-                    </button>
-                 )}
+                 {(() => {
+                   const isOwnItem = item.farmerId?._id === user?._id || item.farmerId === user?._id;
+                   const isFarmer = user?.role === 'FARMER';
+
+                   if (isOwnItem) {
+                     return (
+                       <div className="flex items-center justify-center gap-2 w-full rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-700 py-3.5 text-xs font-black text-emerald-700 dark:text-emerald-400">
+                         <Leaf className="h-4 w-4" /> Your Product
+                       </div>
+                     );
+                   }
+
+                   if (isFarmer) {
+                     return (
+                       <button disabled className="w-full rounded-2xl bg-slate-100 dark:bg-slate-800 py-3.5 text-xs font-bold text-slate-400 cursor-not-allowed">
+                         Farmer View
+                       </button>
+                     );
+                   }
+
+                   return (
+                     <div className="flex gap-2">
+                       <button
+                        onClick={() => {
+                            setSelectedItem(item);
+                            setOrderQty(item.minimumOrderQuantity);
+                            setNegotiationMode(false);
+                        }}
+                        className="flex-1 rounded-2xl bg-emerald-600 py-3.5 text-xs font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                       >
+                         <ShoppingCart className="h-4 w-4" /> Buy Now
+                       </button>
+                       <button
+                        onClick={() => {
+                            setSelectedItem(item);
+                            setOrderQty(item.minimumOrderQuantity);
+                            setNegotiationPrice(item.pricePerUnit);
+                            setNegotiationMode(true);
+                        }}
+                        className="px-4 rounded-2xl bg-amber-100 dark:bg-amber-900/30 py-3.5 text-xs font-black text-amber-700 dark:text-amber-400 hover:bg-amber-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                        title="Negotiate Price"
+                       >
+                         <MessageSquare className="h-4 w-4" />
+                       </button>
+                     </div>
+                   );
+                 })()}
                </div>
             </div>
           </motion.div>
@@ -340,6 +395,69 @@ export default function MarketplacePage() {
                              </div>
                           </div>
                        </div>
+
+                       {/* Negotiation Section - Only shown in negotiation mode */}
+                       {negotiationMode && (
+                         <div className="space-y-6 pt-6 border-t border-amber-200 dark:border-amber-800">
+                            <h3 className="text-sm font-black text-amber-900 dark:text-amber-400 uppercase tracking-tighter flex items-center gap-2">
+                               <MessageSquare className="h-5 w-5 text-amber-600" /> Negotiate Deal
+                            </h3>
+                            
+                            <div className="rounded-3xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20 p-6 space-y-4">
+                               <div className="space-y-3">
+                                  <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest pl-1">Your Offer Price (per {selectedItem.unit})</label>
+                                  <div className="flex items-center gap-4">
+                                     <div className="relative flex-1">
+                                        <IndianRupee className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-600" />
+                                        <input 
+                                           type="number"
+                                           min={1}
+                                           max={selectedItem.pricePerUnit * 2}
+                                           value={negotiationPrice}
+                                           onChange={(e) => setNegotiationPrice(Number(e.target.value))}
+                                           className="w-full rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 pl-12 pr-5 py-3.5 text-lg font-black text-slate-900 dark:text-white outline-none focus:border-amber-500 transition-all"
+                                        />
+                                     </div>
+                                     <div className="rounded-2xl bg-amber-100 dark:bg-amber-900/30 px-6 py-4 flex flex-col justify-center">
+                                        <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-tight">Your Total</p>
+                                        <p className="text-xl font-black text-amber-600">{formatCurrency(orderQty * negotiationPrice)}</p>
+                                     </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 px-2 text-[10px] font-bold text-amber-600">
+                                     <Info className="h-3 w-3" /> Original Price: {formatCurrency(selectedItem.pricePerUnit)} per {selectedItem.unit}
+                                  </div>
+                               </div>
+                               
+                               <div className="space-y-1.5">
+                                  <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest pl-1">Message to Farmer (Optional)</label>
+                                  <textarea 
+                                     className="w-full rounded-2xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 px-4 py-3.5 text-sm font-bold outline-none focus:border-amber-500 transition-all dark:text-white resize-none"
+                                     placeholder="Explain your offer, quantity requirements, or any special requests..."
+                                     rows={3}
+                                     value={negotiationMessage}
+                                     onChange={e => setNegotiationMessage(e.target.value)}
+                                  />
+                               </div>
+                               
+                               <div className="flex gap-3 pt-2">
+                                  <button 
+                                     onClick={() => submitNegotiation()}
+                                     disabled={isNegotiating || negotiationPrice <= 0}
+                                     className="flex-1 rounded-2xl bg-amber-600 py-4 text-sm font-black text-white shadow-2xl shadow-amber-600/40 hover:bg-amber-700 transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                     {isNegotiating ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
+                                     {isNegotiating ? 'Sending Offer...' : 'Send Negotiation Offer'}
+                                  </button>
+                                  <button 
+                                     onClick={() => setNegotiationMode(false)}
+                                     className="px-6 rounded-2xl bg-slate-200 dark:bg-slate-800 py-4 text-sm font-black text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-all"
+                                  >
+                                     Cancel
+                                  </button>
+                               </div>
+                            </div>
+                         </div>
+                       )}
 
                        {/* Right Section: Logistics & Fulfillment */}
                        <div className="space-y-8 pt-8 border-t border-slate-100 dark:border-slate-800">

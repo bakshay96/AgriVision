@@ -14,4 +14,6 @@ export declare const emitAIAnalysisComplete: (userId: string, analysisData: Reco
 export declare const emitCropAlert: (tenantId: string, alertData: Record<string, unknown>) => void;
 /** Notify a specific user of a new chat message */
 export declare const emitNewMessage: (userId: string, messageData: Record<string, unknown>) => void;
+/** Notify both negotiation parties about an update (new message, counter, accept, reject) */
+export declare const emitNegotiationUpdate: (buyerId: string, farmerId: string, negotiationData: Record<string, unknown>) => void;
 //# sourceMappingURL=socketService.d.ts.map

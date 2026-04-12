@@ -8,15 +8,17 @@ import {
   Cloud, Sun, CloudRain, Wind, Droplets, Thermometer,
   AlertTriangle, Calendar, MapPin, Sprout, ChevronLeft,
   Navigation, RefreshCw, Sunrise, Sunset, Eye, Gauge,
-  ArrowLeft, Clock, Leaf, CloudSnow, CloudLightning
+  ArrowLeft, Clock, Leaf, CloudSnow, CloudLightning, Search
 } from 'lucide-react';
 import { weatherApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLanguageStore } from '@/store/useLanguageStore';
+import { toast } from 'sonner';
 import { useUserProfile } from '@/hooks/useUser';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { getWeatherAnimation } from '@/components/weather/WeatherAnimations';
+import { getWeatherAnimation, getWeatherBackground, getWeatherCardGradient } from '@/components/weather/WeatherAnimations';
 import FarmersAdvisory from '@/components/weather/FarmersAdvisory';
+import LocationPicker from '@/components/location/LocationPicker';
 import { cn } from '@/lib/utils';
 
 // ────────────────────────────────────────────────────────────────
@@ -147,11 +149,7 @@ function DayDetailPanel({ day, language, t, onClose }: { day: any; language: str
   const sunsetHour = month >= 4 && month <= 8 ? 19 : 18;
 
   const gradientForCondition = () => {
-    const c = (day.condition || '').toLowerCase();
-    if (c.includes('rain') || c.includes('storm')) return 'from-slate-600/90 to-blue-800/90';
-    if (c.includes('cloud')) return 'from-slate-500/80 to-slate-600/80';
-    if (c.includes('snow')) return 'from-blue-300/80 to-indigo-400/80';
-    return 'from-amber-400/80 to-orange-500/80';
+    return getWeatherCardGradient(day.condition || 'Clear');
   };
 
   return (
@@ -333,6 +331,7 @@ export default function WeatherPage() {
   const { data: profile, isLoading: profileLoading } = useUserProfile();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [showAdvisory, setShowAdvisory] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [sessionLocation, setSessionLocation] = useState<{ lat: number, lng: number, address: string } | null>(null);
 
   const { latitude: detectedLat, longitude: detectedLng, address: detectedAddr, loading: detecting, refetch: detectNow } = useGeolocation({ enableHighAccuracy: true });
@@ -360,6 +359,26 @@ export default function WeatherPage() {
       setSessionLocation(newLoc);
       localStorage.setItem('agrivision_session_location', JSON.stringify(newLoc));
     }
+  };
+
+  const handleLocationSelect = (location: {
+    lat: number;
+    lng: number;
+    address: string;
+    village?: string;
+    taluka?: string;
+    district?: string;
+    state?: string;
+    pincode?: string;
+  }) => {
+    const newLoc = {
+      lat: location.lat,
+      lng: location.lng,
+      address: location.address
+    };
+    setSessionLocation(newLoc);
+    localStorage.setItem('agrivision_session_location', JSON.stringify(newLoc));
+    toast.success('Location updated successfully!');
   };
 
   // Resolve which location to use: detected session loc > profile farm loc
@@ -450,6 +469,14 @@ export default function WeatherPage() {
               <span className="font-medium">{displayAddress || (profileLoading ? 'Loading Profile...' : 'Location Not Set')}</span>
             </div>
             <button
+              onClick={() => setShowLocationPicker(true)}
+              className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-all text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+              title="Search Location"
+            >
+              <Search className="h-3 w-3" />
+              Search
+            </button>
+            <button
               onClick={handleDetect}
               disabled={detecting}
               className={cn(
@@ -475,8 +502,11 @@ export default function WeatherPage() {
       </div>
 
 
-      {/* Current Weather */}
-      <GlassCard className="text-white">
+      {/* Current Weather with Dynamic Background */}
+      <GlassCard 
+        gradient={getWeatherCardGradient(weather.current.condition)} 
+        className="text-white"
+      >
         <div className="p-6 md:p-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="text-center md:text-left">
@@ -524,113 +554,184 @@ export default function WeatherPage() {
         </span>
       </div>
 
-      <Card className="dark:bg-slate-900 dark:border-slate-800">
-        <CardContent className="p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-            {weather.forecast.map((day: any, idx: number) => (
-              <motion.button
-                key={idx}
-                onClick={() => setSelectedDay(idx)}
-                whileHover={{ scale: 1.04, y: -4 }}
-                whileTap={{ scale: 0.98 }}
-                className={cn(
-                  'rounded-xl border p-4 text-center transition-all hover:shadow-md',
-                  idx === 0
-                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                    : 'border-slate-200 hover:border-emerald-300 dark:border-slate-700 dark:hover:border-emerald-700'
-                )}
-              >
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        {weather.forecast.map((day: any, idx: number) => {
+          const dayGradient = getWeatherCardGradient(day.condition || 'Clear');
+          return (
+            <motion.button
+              key={idx}
+              onClick={() => setSelectedDay(idx)}
+              whileHover={{ scale: 1.04, y: -4 }}
+              whileTap={{ scale: 0.98 }}
+              className={cn(
+                'relative overflow-hidden rounded-2xl p-4 text-center transition-all hover:shadow-xl border border-white/20',
+                'bg-gradient-to-br',
+                dayGradient
+              )}
+            >
+              {/* Glass overlay */}
+              <div className="absolute inset-0 bg-white/10 backdrop-blur-sm" />
+              
+              <div className="relative z-10">
+                <p className="text-xs text-white/80 font-medium">
                   {idx === 0
                     ? (language === 'mr' ? 'आज' : language === 'hi' ? 'आज' : 'Today')
                     : new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
                 </p>
-                <div className="w-10 h-10 mx-auto my-2">
+                <div className="w-12 h-12 mx-auto my-2">
                   {getWeatherAnimation(day.condition, 'w-full h-full')}
                 </div>
-                <p className="font-bold text-slate-900 dark:text-white">{Math.round(day.temperature?.avg || day.temperature)}°</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
+                <p className="font-bold text-white text-lg">{Math.round(day.temperature?.avg || day.temperature)}°</p>
+                <p className="text-xs text-white/70">
                   {Math.round(day.temperature?.min)}° / {Math.round(day.temperature?.max)}°
                 </p>
                 {(day.rainfall || 0) > 0 && (
-                  <p className="mt-1 text-xs text-blue-500 font-medium">{Math.round(day.rainfall)}mm</p>
+                  <p className="mt-1 text-xs text-blue-200 font-medium">{Math.round(day.rainfall)}mm</p>
                 )}
-              </motion.button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Alerts & Recommendations */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
-              {t('weather.alerts')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(weather.alerts || []).length === 0 ? (
-              <div className="text-center py-6">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-100 dark:bg-emerald-900/20 flex items-center justify-center">
-                  <Sun className="h-6 w-6 text-emerald-500" />
+                {/* Humidity indicator */}
+                <div className="mt-2 flex items-center justify-center gap-1 text-white/60">
+                  <Droplets className="h-3 w-3" />
+                  <span className="text-[10px]">{day.humidity || 60}%</span>
                 </div>
-                <p className="text-slate-400 dark:text-slate-500 text-sm">{t('weather.noAlerts')}</p>
               </div>
-            ) : (
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* Alerts & Recommendations - Only show if data exists */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Weather Alerts - Only show if there are alerts */}
+        {(weather.alerts || []).length > 0 && (
+          <Card className="dark:bg-slate-900 dark:border-slate-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-5 w-5" />
+                {t('weather.alerts')}
+                <span className="ml-2 px-2 py-0.5 text-xs bg-amber-500 text-white rounded-full">
+                  {weather.alerts.length}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="space-y-3">
                 {weather.alerts.map((alert: any, idx: number) => (
-                  <div key={idx} className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500">
+                  <motion.div 
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className="rounded-lg p-3 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500"
+                  >
                     <p className="font-semibold text-amber-900 dark:text-amber-100 text-sm">{alert.title}</p>
                     <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{alert.description}</p>
-                  </div>
+                    {alert.severity && (
+                      <span className={cn(
+                        'mt-2 inline-block px-2 py-0.5 text-[10px] rounded-full font-medium',
+                        alert.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                        alert.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                      )}>
+                        {alert.severity === 'high' 
+                          ? (language === 'mr' ? 'उच्च' : language === 'hi' ? 'उच्च' : 'High')
+                          : alert.severity === 'medium'
+                          ? (language === 'mr' ? 'मध्यम' : language === 'hi' ? 'मध्यम' : 'Medium')
+                          : (language === 'mr' ? 'कमी' : language === 'hi' ? 'कम' : 'Low')
+                        }
+                      </span>
+                    )}
+                  </motion.div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
+        {/* Crop Recommendations - Enhanced with more details */}
+        <Card className="dark:bg-slate-900 dark:border-slate-800 md:col-span-{(weather.alerts || []).length > 0 ? 1 : 2}">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
               <Sprout className="h-5 w-5" />
-              {t('weather.recommendations')}
+              {language === 'mr' ? 'पीक शिफारसी' : language === 'hi' ? 'फसल सिफारिशें' : 'Crop Recommendations'}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {(weather.cropRecommendations || []).map((rec: any, idx: number) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  className="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3"
-                >
-                  <div className={cn('rounded-full p-2 flex-shrink-0',
-                    rec.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
-                    rec.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' :
-                    'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  )}>
-                    <Sprout className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold text-slate-900 dark:text-white text-sm">{rec.cropName}</p>
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs flex-shrink-0',
-                        rec.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
-                        rec.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' :
-                        'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                      )}>
-                        {rec.priority}
-                      </span>
+            {(weather.cropRecommendations || []).length === 0 ? (
+              <div className="text-center py-6">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-100 dark:bg-emerald-900/20 flex items-center justify-center">
+                  <Sprout className="h-6 w-6 text-emerald-500" />
+                </div>
+                <p className="text-slate-400 dark:text-slate-500 text-sm">
+                  {language === 'mr' ? 'शिफारसी उपलब्ध नाहीत' : language === 'hi' ? 'कोई सिफारिश उपलब्ध नहीं' : 'No recommendations available'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(weather.cropRecommendations || []).map((rec: any, idx: number) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.08 }}
+                    className={cn(
+                      'flex items-start gap-3 rounded-xl border p-4 transition-all hover:shadow-md',
+                      rec.priority === 'high' ? 'bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-800' :
+                      rec.priority === 'medium' ? 'bg-yellow-50/50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800' :
+                      'bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800'
+                    )}
+                  >
+                    <div className={cn('rounded-xl p-2.5 flex-shrink-0',
+                      rec.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                      rec.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' :
+                      'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                    )}>
+                      <Sprout className="h-5 w-5" />
                     </div>
-                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{rec.action}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-slate-900 dark:text-white text-sm">{rec.cropName}</p>
+                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0',
+                          rec.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                          rec.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' :
+                          'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                        )}>
+                          {rec.priority === 'high' 
+                            ? (language === 'mr' ? 'उच्च' : language === 'hi' ? 'उच्च' : 'High')
+                            : rec.priority === 'medium'
+                            ? (language === 'mr' ? 'मध्यम' : language === 'hi' ? 'मध्यम' : 'Medium')
+                            : (language === 'mr' ? 'सामान्य' : language === 'hi' ? 'सामान्य' : 'Normal')
+                          }
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{rec.action}</p>
+                      {rec.reason && (
+                        <p className="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <span className="w-1 h-1 rounded-full bg-slate-400" />
+                          {rec.reason}
+                        </p>
+                      )}
+                      {rec.impact && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <span className={cn(
+                            'text-[10px] px-2 py-0.5 rounded-full',
+                            rec.impact === 'positive' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                            rec.impact === 'negative' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                            'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                          )}>
+                            {rec.impact === 'positive' 
+                              ? (language === 'mr' ? 'सकारात्मक' : language === 'hi' ? 'सकारात्मक' : 'Positive')
+                              : rec.impact === 'negative'
+                              ? (language === 'mr' ? 'नकारात्मक' : language === 'hi' ? 'नकारात्मक' : 'Negative')
+                              : (language === 'mr' ? 'तटस्थ' : language === 'hi' ? 'तटस्थ' : 'Neutral')
+                            }
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -641,6 +742,14 @@ export default function WeatherPage() {
         onClose={() => setShowAdvisory(false)}
         weatherData={weather}
         crops={(weather.cropRecommendations || []).map((r: any) => r.cropName)}
+      />
+
+      {/* Location Picker Modal */}
+      <LocationPicker
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={handleLocationSelect}
+        initialLocation={sessionLocation || undefined}
       />
     </motion.div>
   );

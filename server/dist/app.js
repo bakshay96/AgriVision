@@ -14,9 +14,11 @@ dotenv_1.default.config();
 const auth_1 = __importDefault(require("./routes/auth"));
 const crops_1 = __importDefault(require("./routes/crops"));
 const orders_1 = __importDefault(require("./routes/orders"));
+const negotiations_1 = __importDefault(require("./routes/negotiations"));
 const ai_1 = __importDefault(require("./routes/ai"));
 const inventory_1 = __importDefault(require("./routes/inventory"));
 const weather_1 = __importDefault(require("./routes/weather"));
+const geocode_1 = __importDefault(require("./routes/geocode"));
 const marketPrices_1 = __importDefault(require("./routes/marketPrices"));
 const cropEncyclopedia_1 = __importDefault(require("./routes/cropEncyclopedia"));
 const financial_1 = __importDefault(require("./routes/financial"));
@@ -25,6 +27,13 @@ const user_1 = __importDefault(require("./routes/user"));
 const homeController_1 = require("./controllers/homeController");
 const errorHandler_1 = require("./middleware/errorHandler");
 const app = (0, express_1.default)();
+const corsOptions = {
+    // Allow your Netlify URL
+    origin: 'https://agirivisiion.netlify.app',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true, // Allow cookies/headers if needed
+    optionsSuccessStatus: 204
+};
 // ─── Security & Parsing ───────────────────────────────────────────────────────
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: {
@@ -41,6 +50,7 @@ app.use((0, helmet_1.default)({
             connectSrc: [
                 "'self'",
                 'http://localhost:3000',
+                'https://agirivisiion.netlify.app',
                 process.env.CLIENT_URL || '',
                 'https://*.amazonaws.com', // Allow S3 connections
             ],
@@ -52,10 +62,12 @@ app.use((0, cors_1.default)({
         process.env.CLIENT_URL || '',
         'http://localhost:3000',
         'http://127.0.0.1:5173',
+        'https://agirivisiion.netlify.app',
     ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204
 }));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
@@ -89,9 +101,11 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', auth_1.default);
 app.use('/api/crops', crops_1.default);
 app.use('/api/orders', orders_1.default);
+app.use('/api/negotiations', negotiations_1.default);
 app.use('/api/ai', ai_1.default);
 app.use('/api/inventory', inventory_1.default);
 app.use('/api/weather', weather_1.default);
+app.use('/api/geocode', geocode_1.default);
 app.use('/api/market-prices', marketPrices_1.default);
 app.use('/api/crop-encyclopedia', cropEncyclopedia_1.default);
 app.use('/api/financial', financial_1.default);

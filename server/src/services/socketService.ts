@@ -133,3 +133,19 @@ export const emitNewMessage = (
     timestamp: new Date().toISOString(),
   });
 };
+
+/** Notify both negotiation parties about an update (new message, counter, accept, reject) */
+export const emitNegotiationUpdate = (
+  buyerId: string,
+  farmerId: string,
+  negotiationData: Record<string, unknown>
+): void => {
+  const payload = {
+    type: 'NEGOTIATION_UPDATE',
+    payload: negotiationData,
+    timestamp: new Date().toISOString(),
+  };
+  getIO().to(`user:${buyerId}`).emit('negotiation_update', payload);
+  getIO().to(`user:${farmerId}`).emit('negotiation_update', payload);
+  console.log(`[Socket] Emitted negotiation_update to buyer:${buyerId} and farmer:${farmerId}`);
+};

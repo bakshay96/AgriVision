@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.emitNewMessage = exports.emitCropAlert = exports.emitAIAnalysisComplete = exports.emitOrderConfirmation = exports.emitOrderStatusUpdate = exports.emitNewOrder = exports.getIO = exports.initSocketService = void 0;
+exports.emitNegotiationUpdate = exports.emitNewMessage = exports.emitCropAlert = exports.emitAIAnalysisComplete = exports.emitOrderConfirmation = exports.emitOrderStatusUpdate = exports.emitNewOrder = exports.getIO = exports.initSocketService = void 0;
 const socket_io_1 = require("socket.io");
 let io = null;
 // Room naming convention: `tenant:{tenantId}` and `user:{userId}`
@@ -13,6 +13,7 @@ const initSocketService = (httpServer) => {
                 'http://localhost:5173',
                 'http://127.0.0.1:3000',
                 'http://127.0.0.1:5173',
+                "*"
             ].filter(Boolean),
             methods: ['GET', 'POST'],
             credentials: true,
@@ -111,4 +112,16 @@ const emitNewMessage = (userId, messageData) => {
     });
 };
 exports.emitNewMessage = emitNewMessage;
+/** Notify both negotiation parties about an update (new message, counter, accept, reject) */
+const emitNegotiationUpdate = (buyerId, farmerId, negotiationData) => {
+    const payload = {
+        type: 'NEGOTIATION_UPDATE',
+        payload: negotiationData,
+        timestamp: new Date().toISOString(),
+    };
+    (0, exports.getIO)().to(`user:${buyerId}`).emit('negotiation_update', payload);
+    (0, exports.getIO)().to(`user:${farmerId}`).emit('negotiation_update', payload);
+    console.log(`[Socket] Emitted negotiation_update to buyer:${buyerId} and farmer:${farmerId}`);
+};
+exports.emitNegotiationUpdate = emitNegotiationUpdate;
 //# sourceMappingURL=socketService.js.map

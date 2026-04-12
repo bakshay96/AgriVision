@@ -163,6 +163,7 @@ export const uploadBuffer = async (
       Key: key,
       Body: buffer,
       ContentType: mimeType,
+      ACL: "bucket-owner-full-control",
       Metadata: {
         'original-name': encodeURIComponent(originalName),
         'uploaded-at': new Date().toISOString(),

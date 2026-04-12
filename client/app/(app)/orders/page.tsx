@@ -6,9 +6,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingCart, Package, Truck, CheckCircle, Clock, X, XCircle,
   ChevronDown, ChevronUp, MapPin, Phone,
-  Calendar, IndianRupee, Filter, Search, ExternalLink, AlertTriangle, Popcorn
+  Calendar, IndianRupee, Filter, Search, ExternalLink, AlertTriangle, Popcorn,
+  MessageSquare
 } from 'lucide-react';
-import { ordersApi } from '@/lib/api';
+import { ordersApi, negotiationApi } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { formatCurrency } from '@/lib/utils';
@@ -23,7 +24,7 @@ import { useFloatingChat } from '@/hooks/useFloatingChat';
 interface Order {
   _id: string;
   orderNumber: string;
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'pending' | 'negotiating' | 'deal_confirmed' | 'ready_for_pickup' | 'picked_up' | 'in_transit' | 'delivered' | 'cancelled';
   totalAmount: number;
   items: Array<{
     cropName: string;
@@ -75,40 +76,56 @@ const statusConfig: Record<string, {
     icon: Clock,
     label: 'Pending',
     description: 'Order placed, waiting for farmer confirmation',
-    farmerAction: 'Confirm or cancel this order',
+    farmerAction: 'Review and confirm the deal',
     buyerAction: 'Waiting for farmer to confirm'
   },
-  confirmed: { 
+  negotiating: { 
+    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', 
+    icon: MessageSquare,
+    label: 'Negotiating',
+    description: 'Price/quantity negotiation in progress',
+    farmerAction: 'Respond to buyer offer',
+    buyerAction: 'Waiting for farmer response'
+  },
+  deal_confirmed: { 
     color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', 
     icon: CheckCircle,
-    label: 'Confirmed',
-    description: 'Farmer has confirmed the order',
-    farmerAction: 'Waiting for buyer to process',
-    buyerAction: 'Mark as Processing or cancel'
+    label: 'Deal Confirmed',
+    description: 'Both parties confirmed the deal',
+    farmerAction: 'Prepare goods for pickup',
+    buyerAction: 'Arrange transport & confirm deal'
   },
-  processing: { 
-    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', 
+  ready_for_pickup: { 
+    color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400', 
     icon: Package,
-    label: 'Processing',
-    description: 'Order is being prepared',
-    farmerAction: 'Order is being processed by buyer',
-    buyerAction: 'Mark as Shipped or cancel'
+    label: 'Ready for Pickup',
+    description: 'Goods ready, awaiting buyer pickup',
+    farmerAction: 'Goods prepared and ready',
+    buyerAction: 'Arrange pickup & transport'
   },
-  shipped: { 
+  picked_up: { 
     color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400', 
     icon: Truck,
-    label: 'Shipped',
-    description: 'Order is in transit',
-    farmerAction: 'Order has been shipped',
-    buyerAction: 'Mark as Delivered when received'
+    label: 'Picked Up',
+    description: 'Goods picked up, in transit',
+    farmerAction: 'Handed over to transporter',
+    buyerAction: 'Goods collected from farm'
+  },
+  in_transit: { 
+    color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400', 
+    icon: Truck,
+    label: 'In Transit',
+    description: 'Goods being transported to destination',
+    farmerAction: 'Tracking delivery progress',
+    buyerAction: 'Monitor shipment arrival'
   },
   delivered: { 
     color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', 
     icon: CheckCircle,
     label: 'Delivered',
     description: 'Order delivered successfully',
-    farmerAction: 'Order completed',
-    buyerAction: 'Order received'
+    farmerAction: 'Order completed - payment pending',
+    buyerAction: 'Received goods - complete payment'
   },
   cancelled: { 
     color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', 
@@ -120,28 +137,34 @@ const statusConfig: Record<string, {
   },
 };
 
-const statusFlow = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
+const statusFlow = ['pending', 'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit', 'delivered'];
 
 // Status permissions - matches backend logic
 // PENDING: Farmer can confirm/cancel, Buyer can cancel
-// CONFIRMED: Buyer can process/cancel
-// PROCESSING: Buyer can ship/cancel
-// SHIPPED: Buyer can mark delivered
+// NEGOTIATING: Both can counter/accept/reject
+// DEAL_CONFIRMED: Both confirm deal, then ready for pickup
+// READY_FOR_PICKUP: Buyer arranges transport
+// PICKED_UP: Buyer verifies weight/quantity
+// IN_TRANSIT: Transport in progress
 // DELIVERED: Final state
 const statusPermissions: Record<'farmer' | 'buyer', Record<string, string[]>> = {
   farmer: {
-    pending: ['confirmed', 'cancelled'],
-    confirmed: [],
-    processing: [],
-    shipped: [],
+    pending: ['deal_confirmed', 'cancelled'],
+    negotiating: ['deal_confirmed', 'cancelled'],
+    deal_confirmed: [],
+    ready_for_pickup: [],
+    picked_up: [],
+    in_transit: [],
     delivered: [],
     cancelled: []
   },
   buyer: {
     pending: ['cancelled'],
-    confirmed: ['processing', 'cancelled'],
-    processing: ['shipped', 'cancelled'],
-    shipped: ['delivered'],
+    negotiating: ['deal_confirmed', 'cancelled'],
+    deal_confirmed: ['ready_for_pickup', 'cancelled'],
+    ready_for_pickup: ['picked_up', 'cancelled'],
+    picked_up: ['in_transit', 'cancelled'],
+    in_transit: ['delivered'],
     delivered: [],
     cancelled: []
   }
@@ -155,6 +178,7 @@ export default function OrdersPage() {
   const { openFloatingChat, isChatOpen } = useFloatingChat();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [activeView, setActiveView] = useState<'active' | 'delivered' | 'cancelled'>('active');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   
   // Confirm dialog state
@@ -182,24 +206,37 @@ export default function OrdersPage() {
   const orders: Order[] = data?.orders || [];
   const stats = statsData?.stats || [];
 
-  // Filter orders
-  const filteredOrders = orders.filter(order => {
+  // Filter orders - show active orders by default
+  const activeStatuses = ['pending', 'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit'];
+  const filteredByView = orders.filter(order => {
+    if (activeView === 'active') return activeStatuses.includes(order.status);
+    if (activeView === 'delivered') return order.status === 'delivered';
+    if (activeView === 'cancelled') return order.status === 'cancelled';
+    return true;
+  });
+  
+  // Further filter by search and status filter
+  const filteredOrders = filteredByView.filter(order => {
     const matchesSearch = !searchQuery || 
       order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.items.some(i => i.cropName.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesSearch;
+    const matchesStatus = !statusFilter || order.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   // Calculate stats
   const orderStats = {
     total: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
-    processing: orders.filter(o => ['confirmed', 'processing'].includes(o.status)).length,
-    shipped: orders.filter(o => o.status === 'shipped').length,
+    negotiating: orders.filter(o => o.status === 'negotiating').length,
+    dealConfirmed: orders.filter(o => o.status === 'deal_confirmed').length,
+    readyForPickup: orders.filter(o => o.status === 'ready_for_pickup').length,
+    pickedUp: orders.filter(o => o.status === 'picked_up').length,
+    inTransit: orders.filter(o => o.status === 'in_transit').length,
     delivered: orders.filter(o => o.status === 'delivered').length,
     cancelled: orders.filter(o => o.status === 'cancelled').length,
     totalRevenue: orders
-      .filter(o => ['confirmed', 'processing', 'shipped', 'delivered'].includes(o.status))
+      .filter(o => ['deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit', 'delivered'].includes(o.status))
       .reduce((sum, o) => sum + o.totalAmount, 0),
   };
 
@@ -223,6 +260,60 @@ export default function OrdersPage() {
     },
     onError: (error) => showErrorToast(error, 'Cancel Failed'),
   });
+
+  // B2B Deal Confirmation
+  const confirmDealMutation = useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes?: string }) => ordersApi.confirmDeal(id, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Deal confirmed successfully');
+    },
+    onError: (error) => showErrorToast(error, 'Confirmation Failed'),
+  });
+
+  // Update Procurement
+  const updateProcurementMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => 
+      ordersApi.updateProcurement(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Procurement details updated');
+    },
+    onError: (error) => showErrorToast(error, 'Update Failed'),
+  });
+
+  // Verify Pickup
+  const verifyPickupMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) => 
+      ordersApi.verifyPickup(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Pickup verified successfully');
+    },
+    onError: (error) => showErrorToast(error, 'Verification Failed'),
+  });
+
+  // Mark In Transit
+  const markInTransitMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data?: Record<string, unknown> }) => 
+      ordersApi.markInTransit(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Order marked as in transit');
+    },
+    onError: (error) => showErrorToast(error, 'Update Failed'),
+  });
+
+  // Mark Delivered
+  const markDeliveredMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data?: Record<string, unknown> }) => 
+      ordersApi.markDelivered(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Order marked as delivered');
+    },
+    onError: (error) => showErrorToast(error, 'Update Failed'),
+  });
   
   return (
     <motion.div
@@ -240,91 +331,94 @@ export default function OrdersPage() {
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+      {/* Stats Cards - Slim Design */}
+      <div className="grid gap-3 grid-cols-4 sm:grid-cols-4 lg:grid-cols-8">
+        {[
+          { label: 'Total', value: orderStats.total, icon: ShoppingCart, color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+          { label: 'Pending', value: orderStats.pending, icon: Clock, color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' },
+          { label: 'Negotiating', value: orderStats.negotiating, icon: MessageSquare, color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' },
+          { label: 'Deal Confirmed', value: orderStats.dealConfirmed, icon: CheckCircle, color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+          { label: 'Ready', value: orderStats.readyForPickup, icon: Package, color: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400' },
+          { label: 'Picked Up', value: orderStats.pickedUp, icon: Truck, color: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' },
+          { label: 'In Transit', value: orderStats.inTransit, icon: Truck, color: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400' },
+          { label: 'Delivered', value: orderStats.delivered, icon: CheckCircle, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
+        ].map((stat, i) => (
+          <Card key={i} className="dark:bg-slate-900 dark:border-slate-800">
+            <CardContent className="p-3">
+              <div className="flex flex-col items-center text-center gap-1">
+                <div className={cn("p-1.5 rounded-lg", stat.color)}>
+                  <stat.icon className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{stat.label}</p>
+                <p className="text-lg font-bold text-slate-900 dark:text-white">{stat.value}</p>
               </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Total Orders</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{orderStats.total}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Pending</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{orderStats.pending}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                <Package className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Processing</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{orderStats.processing}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                <Truck className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Shipped</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{orderStats.shipped}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Delivered</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{orderStats.delivered}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dark:bg-slate-900 dark:border-slate-800">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Cancelled</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{orderStats.cancelled}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* View Tabs - Active / Delivered / Cancelled - Now below stats cards */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setActiveView('active')}
+          className={cn(
+            "flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all",
+            activeView === 'active'
+              ? "bg-emerald-600 text-white shadow-lg"
+              : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-emerald-300"
+          )}
+        >
+          <span className="flex items-center justify-center gap-2">
+            <Package className="h-4 w-4" />
+            Active Orders
+            <span className={cn(
+              "px-2 py-0.5 rounded-full text-xs",
+              activeView === 'active' ? "bg-white/20" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+            )}>
+              {orderStats.pending + orderStats.negotiating + orderStats.dealConfirmed + orderStats.readyForPickup + orderStats.pickedUp + orderStats.inTransit}
+            </span>
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveView('delivered')}
+          className={cn(
+            "flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all",
+            activeView === 'delivered'
+              ? "bg-emerald-600 text-white shadow-lg"
+              : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-emerald-300"
+          )}
+        >
+          <span className="flex items-center justify-center gap-2">
+            <CheckCircle className="h-4 w-4" />
+            Delivered
+            <span className={cn(
+              "px-2 py-0.5 rounded-full text-xs",
+              activeView === 'delivered' ? "bg-white/20" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+            )}>
+              {orderStats.delivered}
+            </span>
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveView('cancelled')}
+          className={cn(
+            "flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all",
+            activeView === 'cancelled'
+              ? "bg-red-600 text-white shadow-lg"
+              : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-red-300"
+          )}
+        >
+          <span className="flex items-center justify-center gap-2">
+            <XCircle className="h-4 w-4" />
+            Cancelled
+            <span className={cn(
+              "px-2 py-0.5 rounded-full text-xs",
+              activeView === 'cancelled' ? "bg-white/20" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+            )}>
+              {orderStats.cancelled}
+            </span>
+          </span>
+        </button>
       </div>
 
       {/* Filters */}
@@ -350,9 +444,11 @@ export default function OrdersPage() {
             >
               <option value="">All Status</option>
               <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="processing">Processing</option>
-              <option value="shipped">Shipped</option>
+              <option value="negotiating">Negotiating</option>
+              <option value="deal_confirmed">Deal Confirmed</option>
+              <option value="ready_for_pickup">Ready for Pickup</option>
+              <option value="picked_up">Picked Up</option>
+              <option value="in_transit">In Transit</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
             </select>
@@ -386,7 +482,10 @@ export default function OrdersPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                <Card className="dark:bg-slate-900 dark:border-slate-800">
+                <Card 
+                  className="dark:bg-slate-900 dark:border-slate-800 cursor-pointer"
+                  onClick={() => setExpandedOrder(isExpanded ? null : order._id)}
+                >
                   {/* Order Header */}
                   <CardContent className="p-4">
                     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -418,21 +517,31 @@ export default function OrdersPage() {
                             {order.items.length} item{order.items.length > 1 ? 's' : ''}
                           </p>
                         </div>
-                        <button
-                          onClick={() => setExpandedOrder(isExpanded ? null : order._id)}
-                          className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                        >
+                        <div className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                           {isExpanded ? (
                             <ChevronUp className="h-5 w-5 text-slate-400" />
                           ) : (
                             <ChevronDown className="h-5 w-5 text-slate-400" />
                           )}
-                        </button>
+                        </div>
                       </div>
                     </div>
 
+                    {/* Current Status Above Progress Bar */}
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <StatusIcon className={cn("h-4 w-4", order.status === 'cancelled' ? "text-red-500" : "text-emerald-500")} />
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                          {statusConfig[order.status].label}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {statusConfig[order.status].description}
+                      </span>
+                    </div>
+
                     {/* Progress Bar */}
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <div className="flex gap-1">
                         {statusFlow.map((s, i) => {
                           const currentIndex = statusFlow.indexOf(order.status);
@@ -458,75 +567,79 @@ export default function OrdersPage() {
                       </div>
                     </div>
 
-                    {/* Quick Actions for Farmers with Pending Orders - Always Visible */}
-                    {userRole === 'FARMER' && order.status === 'pending' && (
-                      <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                    {/* Quick Actions for Farmers with Pending/Negotiating/Deal_confirmed Orders */}
+                    {(order.status === 'pending' || order.status === 'negotiating' || order.status === 'deal_confirmed') && userRole === 'FARMER' && (
+                      <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800" onClick={(e) => e.stopPropagation()}>
                         <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-2 flex items-center gap-2">
                           <AlertTriangle className="h-4 w-4" />
-                          Action Required
+                          {order.status === 'deal_confirmed' ? 'Deal in progress — Confirm your side to proceed' : 'Action Required'}
                         </p>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setConfirmDialog({
                                 isOpen: true,
-                                title: 'Confirm Order',
-                                message: `Confirm order #${order.orderNumber}? The buyer will be notified and the order will proceed to processing.`,
-                                confirmText: 'Confirm Order',
+                                title: 'Confirm Deal',
+                                message: `Confirm deal for order #${order.orderNumber}? This will lock in the agreement and proceed to pickup arrangement.`,
+                                confirmText: 'Confirm Deal',
                                 variant: 'success',
                                 onConfirm: () => {
-                                  updateStatusMutation.mutate({ id: order._id, status: 'confirmed' });
+                                  confirmDealMutation.mutate({ id: order._id, notes: 'Deal confirmed by farmer' });
                                   setConfirmDialog(prev => ({ ...prev, isOpen: false }));
                                 }
                               });
                             }}
-                            disabled={updateStatusMutation.isPending}
+                            disabled={confirmDealMutation.isPending}
                             className="flex-1 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                           >
                             <CheckCircle className="h-4 w-4" />
-                            Confirm Order
+                            {confirmDealMutation.isPending ? 'Confirming...' : 'Confirm Deal'}
                           </button>
-                          <button
-                            onClick={() => {
-                              setConfirmDialog({
-                                isOpen: true,
-                                title: 'Decline Order',
-                                message: `Decline order #${order.orderNumber}? The inventory will be restored and the buyer will be notified.`,
-                                confirmText: 'Decline Order',
-                                variant: 'danger',
-                                onConfirm: () => {
-                                  updateStatusMutation.mutate({ id: order._id, status: 'cancelled' });
-                                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-                                }
-                              });
-                            }}
-                            disabled={updateStatusMutation.isPending}
-                            className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                          >
-                            <X className="h-4 w-4" />
-                            Decline
-                          </button>
+                          {order.status !== 'deal_confirmed' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDialog({
+                                  isOpen: true,
+                                  title: 'Decline Order',
+                                  message: `Decline order #${order.orderNumber}? The inventory will be restored and the buyer will be notified.`,
+                                  confirmText: 'Decline Order',
+                                  variant: 'danger',
+                                  onConfirm: () => {
+                                    cancelOrderMutation.mutate(order._id);
+                                    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                                  }
+                                });
+                              }}
+                              disabled={cancelOrderMutation.isPending}
+                              className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                            >
+                              <X className="h-4 w-4" />
+                              Decline
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
 
-                    {/* Quick Actions for Buyers with Confirmed Orders - Always Visible */}
-                    {userRole === 'BUYER' && order.status === 'confirmed' && (
-                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    {/* Quick Actions for Buyers with Deal Confirmed Orders */}
+                    {userRole === 'BUYER' && order.status === 'deal_confirmed' && (
+                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800" onClick={(e) => e.stopPropagation()}>
                         <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
-                          🎉 Farmer confirmed your order! What's next?
+                          🤝 Deal confirmed! Arrange pickup now?
                         </p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
                               setConfirmDialog({
                                 isOpen: true,
-                                title: 'Start Processing',
-                                message: 'Mark order as Processing? The order will proceed to the next stage.',
-                                confirmText: 'Start Processing',
+                                title: 'Arrange Pickup',
+                                message: 'Mark order as Ready for Pickup? The farmer will prepare the goods.',
+                                confirmText: 'Arrange Pickup',
                                 variant: 'success',
                                 onConfirm: () => {
-                                  updateStatusMutation.mutate({ id: order._id, status: 'processing' });
+                                  updateStatusMutation.mutate({ id: order._id, status: 'ready_for_pickup' });
                                   setConfirmDialog(prev => ({ ...prev, isOpen: false }));
                                 }
                               });
@@ -534,8 +647,8 @@ export default function OrdersPage() {
                             disabled={updateStatusMutation.isPending}
                             className="flex-1 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                           >
-                            <Package className="h-4 w-4" />
-                            Start Processing
+                            <Truck className="h-4 w-4" />
+                            Arrange Pickup
                           </button>
                           <button
                             onClick={() => {
@@ -546,12 +659,12 @@ export default function OrdersPage() {
                                 confirmText: 'Cancel Order',
                                 variant: 'danger',
                                 onConfirm: () => {
-                                  updateStatusMutation.mutate({ id: order._id, status: 'cancelled' });
+                                  cancelOrderMutation.mutate(order._id);
                                   setConfirmDialog(prev => ({ ...prev, isOpen: false }));
                                 }
                               });
                             }}
-                            disabled={updateStatusMutation.isPending}
+                            disabled={cancelOrderMutation.isPending}
                             className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                           >
                             <X className="h-4 w-4" />
@@ -561,11 +674,116 @@ export default function OrdersPage() {
                       </div>
                     )}
 
-                    {/* Quick Actions for Buyers with Shipped Orders - Always Visible */}
-                    {userRole === 'BUYER' && order.status === 'shipped' && (
-                      <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                    {/* Quick Actions for Buyers with Ready for Pickup Orders */}
+                    {userRole === 'BUYER' && order.status === 'ready_for_pickup' && (
+                      <div className="mt-4 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800" onClick={(e) => e.stopPropagation()}>
+                        <p className="text-sm font-medium text-cyan-800 dark:text-cyan-300 mb-2">
+                          📦 Goods ready! Verify pickup details?
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setConfirmDialog({
+                                isOpen: true,
+                                title: 'Verify Pickup',
+                                message: 'Confirm goods picked up and verify quantity/weight?',
+                                confirmText: 'Verify Pickup',
+                                variant: 'success',
+                                onConfirm: () => {
+                                  verifyPickupMutation.mutate({ 
+                                    id: order._id, 
+                                    data: { actualQuantity: order.items[0]?.quantity, qualityCheckPassed: true }
+                                  });
+                                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                                }
+                              });
+                            }}
+                            disabled={verifyPickupMutation.isPending}
+                            className="flex-1 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Package className="h-4 w-4" />
+                            Verify Pickup
+                          </button>
+                          <button
+                            onClick={() => {
+                              setConfirmDialog({
+                                isOpen: true,
+                                title: 'Cancel Order',
+                                message: 'Cancel this order? The inventory will be restored.',
+                                confirmText: 'Cancel Order',
+                                variant: 'danger',
+                                onConfirm: () => {
+                                  cancelOrderMutation.mutate(order._id);
+                                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                                }
+                              });
+                            }}
+                            disabled={cancelOrderMutation.isPending}
+                            className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <X className="h-4 w-4" />
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Actions for Buyers with Picked Up Orders */}
+                    {userRole === 'BUYER' && order.status === 'picked_up' && (
+                      <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800" onClick={(e) => e.stopPropagation()}>
                         <p className="text-sm font-medium text-indigo-800 dark:text-indigo-300 mb-2">
-                          🚚 Your order is on the way!
+                          🚚 Goods picked up! Mark as in transit?
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setConfirmDialog({
+                                isOpen: true,
+                                title: 'Mark In Transit',
+                                message: 'Mark order as In Transit? Add tracking details if available.',
+                                confirmText: 'Mark In Transit',
+                                variant: 'success',
+                                onConfirm: () => {
+                                  markInTransitMutation.mutate({ id: order._id });
+                                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                                }
+                              });
+                            }}
+                            disabled={markInTransitMutation.isPending}
+                            className="flex-1 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Truck className="h-4 w-4" />
+                            Mark In Transit
+                          </button>
+                          <button
+                            onClick={() => {
+                              setConfirmDialog({
+                                isOpen: true,
+                                title: 'Cancel Order',
+                                message: 'Cancel this order? The inventory will be restored.',
+                                confirmText: 'Cancel Order',
+                                variant: 'danger',
+                                onConfirm: () => {
+                                  cancelOrderMutation.mutate(order._id);
+                                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                                }
+                              });
+                            }}
+                            disabled={cancelOrderMutation.isPending}
+                            className="px-4 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-sm font-medium rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <X className="h-4 w-4" />
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Actions for Buyers with In Transit Orders */}
+                    {userRole === 'BUYER' && order.status === 'in_transit' && (
+                      <div className="mt-4 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800" onClick={(e) => e.stopPropagation()}>
+                        <p className="text-sm font-medium text-violet-800 dark:text-violet-300 mb-2">
+                          🚚 Order is on the way!
                         </p>
                         <button
                           onClick={() => {
@@ -576,12 +794,12 @@ export default function OrdersPage() {
                               confirmText: 'Confirm Delivery',
                               variant: 'success',
                               onConfirm: () => {
-                                updateStatusMutation.mutate({ id: order._id, status: 'delivered' });
+                                markDeliveredMutation.mutate({ id: order._id });
                                 setConfirmDialog(prev => ({ ...prev, isOpen: false }));
                               }
                             });
                           }}
-                          disabled={updateStatusMutation.isPending}
+                          disabled={markDeliveredMutation.isPending}
                           className="w-full px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                         >
                           <CheckCircle className="h-4 w-4" />
@@ -596,6 +814,7 @@ export default function OrdersPage() {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {/* Items */}
                         <div>

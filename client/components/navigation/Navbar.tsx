@@ -1,23 +1,76 @@
 'use client';
 
-import { Bell, Menu, Search, User, Image as ImageIcon, LogOut } from 'lucide-react';
+import { Bell, Menu, Search, User, Image as ImageIcon, LogOut, MapPin, Clock, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAppStore } from '@/store/useAppStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTheme } from 'next-themes';
 import { formatRelativeTime } from '@/lib/utils';
+import LocationPicker from '@/components/location/LocationPicker';
 
 export default function Navbar() {
   const { user, toggleSidebar, markAllRead, unreadCount, notifications, clearUser } = useAppStore();
   const { language, setLanguage } = useLanguageStore();
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const { theme, setTheme, systemTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifOpen && notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+      if (profileOpen && profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [notifOpen, profileOpen]);
+
+  // Auto-close notification after 8s
+  useEffect(() => {
+    if (!notifOpen) return;
+    const t = setTimeout(() => setNotifOpen(false), 8000);
+    return () => clearTimeout(t);
+  }, [notifOpen]);
 
   useEffect(() => setMounted(true), []);
+
+  // Update clock every second
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Get session location
+  const [sessionLocation, setSessionLocation] = useState<{ lat: number, lng: number, address: string } | null>(null);
+  useEffect(() => {
+    const saved = localStorage.getItem('agrivision_session_location');
+    if (saved) {
+      try {
+        setSessionLocation(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const handleLocationSelect = (location: any) => {
+    const newLoc = { lat: location.lat, lng: location.lng, address: location.address };
+    setSessionLocation(newLoc);
+    localStorage.setItem('agrivision_session_location', JSON.stringify(newLoc));
+    setShowLocationPicker(false);
+  };
 
   const getNotifIcon = (type: string) => {
     const icons: Record<string, string> = {
@@ -44,15 +97,45 @@ export default function Navbar() {
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* Search bar (hidden on small screens) */}
-        <div className="hidden items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 sm:flex">
+        {/* Search bar with functionality */}
+        <div className="relative hidden items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 sm:flex">
           <Search className="h-3.5 w-3.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search crops, orders..."
+            placeholder={language === 'mr' ? 'पिके, ऑर्डर शोधा...' : language === 'hi' ? 'फसलें, ऑर्डर खोजें...' : 'Search crops, orders...'}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearchResults(e.target.value.length > 0);
+            }}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && searchQuery.trim()) {
+                window.location.href = `/dashboard?search=${encodeURIComponent(searchQuery)}`;
+              }
+            }}
             className="w-48 bg-transparent text-sm text-slate-600 dark:text-slate-300 placeholder-slate-400 outline-none"
           />
+          {searchQuery && (
+            <button 
+              onClick={() => { setSearchQuery(''); setShowSearchResults(false); }}
+              className="text-slate-400 hover:text-slate-600"
+            >
+              ×
+            </button>
+          )}
         </div>
+
+        {/* Location Selector */}
+        <button
+          onClick={() => setShowLocationPicker(true)}
+          className="hidden md:flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Change location"
+        >
+          <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="max-w-[120px] truncate">
+            {sessionLocation?.address?.split(',')[0] || (language === 'mr' ? 'स्थान निवडा' : language === 'hi' ? 'स्थान चुनें' : 'Select Location')}
+          </span>
+        </button>
       </div>
 
       {/* ────────────────────────────────────────────────────────────────────── */}
@@ -83,7 +166,7 @@ export default function Navbar() {
         )}
 
         {/* Notification Bell */}
-        <div className="relative">
+        <div className="relative" ref={notifRef}>
           <button
             onClick={() => {
               setNotifOpen((o) => !o);
@@ -114,7 +197,12 @@ export default function Navbar() {
               >
                 <div className="border-b border-slate-100 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Notifications</h3>
-                  <span className="text-xs text-slate-400">{notifications.length} total</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">{notifications.length} total</span>
+                    <button onClick={() => setNotifOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-0.5 rounded">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {notifications.length === 0 ? (
@@ -143,7 +231,7 @@ export default function Navbar() {
 
         {/* User Dropdown */}
         {user && (
-          <div className="relative">
+          <div className="relative" ref={profileRef}>
             <button
               onClick={() => setProfileOpen((o) => !o)}
               className="flex items-center gap-2.5 rounded-lg border border-slate-100 dark:border-slate-800 p-1 pr-3 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
@@ -153,7 +241,14 @@ export default function Navbar() {
               </div>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">{user.name}</p>
-                <p className="text-[10px] capitalize text-slate-500 dark:text-slate-400 leading-tight">{user.role?.toLowerCase() || 'user'}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] capitalize text-slate-500 dark:text-slate-400 leading-tight">{user.role?.toLowerCase() || 'user'}</p>
+                  <span className="text-[10px] text-slate-400">•</span>
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </p>
+                </div>
               </div>
             </button>
 
@@ -202,10 +297,13 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* Overlays to close panels */}
-      {(notifOpen || profileOpen) && (
-        <div className="fixed inset-0 z-[-1]" onClick={() => { setNotifOpen(false); setProfileOpen(false); }} />
-      )}
+      {/* Location Picker Modal */}
+      <LocationPicker
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={handleLocationSelect}
+        initialLocation={sessionLocation || undefined}
+      />
     </header>
   );
 }

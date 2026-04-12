@@ -5,13 +5,14 @@ import { motion } from 'framer-motion';
 import { 
   User, Mail, Phone, MapPin, Sprout, Edit2, Save, X,
   Plus, Trash2, Tractor, Home, CreditCard, Globe, Leaf,
-  Wheat, Droplets, Sun, Thermometer, Navigation
+  Wheat, Droplets, Sun, Thermometer, Navigation, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUserProfile, useSelectedCrops, useUpdateProfile, useAddSelectedCrop, useRemoveSelectedCrop } from '@/hooks/useUser';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { indianLocations, kharifCrops, rabiCrops } from '@/lib/indianLocations';
+import LocationPicker from '@/components/location/LocationPicker';
 
 const availableCrops = [
   ...kharifCrops.map(name => ({ name, season: 'Kharif', icon: Droplets })),
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   
   const [isEditing, setIsEditing] = useState(false);
   const [showCropSelector, setShowCropSelector] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
   const [editedProfile, setEditedProfile] = useState<any>({
     name: '',
@@ -184,6 +186,32 @@ export default function ProfilePage() {
 
   const handleRemoveCrop = (cropName: string) => {
     removeCrop.mutate(cropName);
+  };
+
+  const handleLocationSelect = (location: {
+    lat: number;
+    lng: number;
+    address: string;
+    village?: string;
+    taluka?: string;
+    district?: string;
+    state?: string;
+    pincode?: string;
+  }) => {
+    setEditedProfile({
+      ...editedProfile,
+      village: location.village || editedProfile.village,
+      taluka: location.taluka || editedProfile.taluka,
+      district: location.district || editedProfile.district,
+      state: location.state || editedProfile.state,
+      pincode: location.pincode || editedProfile.pincode,
+      farmLocation: {
+        lat: location.lat,
+        lng: location.lng,
+        address: location.address,
+      },
+    });
+    toast.success('Location selected! You can edit the address details if needed.');
   };
 
   if (profileLoading || cropsLoading) {
@@ -359,25 +387,35 @@ export default function ProfilePage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Get Current Location Button */}
+            {/* Location Selection Buttons */}
             {isEditing && (
-              <button
-                onClick={handleGetCurrentLocation}
-                disabled={gettingLocation}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {gettingLocation ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    {language === 'mr' ? 'स्थान मिळवत आहे...' : language === 'hi' ? 'स्थान प्राप्त कर रहे हैं...' : 'Getting Location...'}
-                  </>
-                ) : (
-                  <>
-                    <Navigation className="h-4 w-4" />
-                    {language === 'mr' ? 'सध्याचे स्थान वापरा' : language === 'hi' ? 'वर्तमान स्थान उपयोग करें' : 'Use Current Location'}
-                  </>
-                )}
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => setShowLocationPicker(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  <Search className="h-4 w-4" />
+                  {language === 'mr' ? 'स्थान शोधा' : language === 'hi' ? 'स्थान खोजें' : 'Search Location'}
+                </button>
+                
+                <button
+                  onClick={handleGetCurrentLocation}
+                  disabled={gettingLocation}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {gettingLocation ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      {language === 'mr' ? 'स्थान मिळवत आहे...' : language === 'hi' ? 'स्थान प्राप्त कर रहे हैं...' : 'Getting Location...'}
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="h-4 w-4" />
+                      {language === 'mr' ? 'सध्याचे स्थान वापरा' : language === 'hi' ? 'वर्तमान स्थान उपयोग करें' : 'Use Current Location'}
+                    </>
+                  )}
+                </button>
+              </div>
             )}
 
             {/* Display current farm location */}
@@ -579,6 +617,14 @@ export default function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Location Picker Modal */}
+      <LocationPicker
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={handleLocationSelect}
+        initialLocation={editedProfile.farmLocation}
+      />
 
       {/* Crop Selector Modal */}
       {showCropSelector && (

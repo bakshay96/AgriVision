@@ -85,6 +85,11 @@ export default function OrderAlerts() {
 
   if (user?.role?.toUpperCase() !== 'FARMER') return null;
 
+  // Don't render if no pending orders and no notifications
+  if (pendingOrders.length === 0 && orderNotifications.length === 0 && !isLoading) {
+    return null;
+  }
+
   return (
     <Card className="dark:bg-slate-900 dark:border-slate-800">
       <CardHeader className="border-b border-slate-100 dark:border-slate-700 pb-3">

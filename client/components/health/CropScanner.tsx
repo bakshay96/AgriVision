@@ -23,6 +23,7 @@ import { aiApi } from '@/lib/api';
 import { getSeverityColor } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { useLanguageStore } from '@/store/useLanguageStore';
+import { useLoader } from '@/hooks/useLoader';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -417,10 +418,12 @@ export default function CropScanner({ onScanComplete, cropId }: CropScannerProps
   const [result, setResult] = useState<ScanResult | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const { language } = useLanguageStore();
+  const { showLoader, hideLoader } = useLoader();
 
   // ── TanStack Query mutation ───────────────────────────────────────────────
   const { mutate: scan, isPending: isScanning } = useMutation({
     mutationFn: (file: File) => {
+      showLoader({ variant: 'analysis', message: 'Analyzing Crop...' });
       // Map tight language codes to full names for Gemini AI understanding
       const languageMap: Record<string, string> = { en: 'English', mr: 'Marathi', hi: 'Hindi' };
       const fullLanguageName = languageMap[language] || 'English';
@@ -460,6 +463,7 @@ export default function CropScanner({ onScanComplete, cropId }: CropScannerProps
       setResult(scanData);
       qc.invalidateQueries({ queryKey: ['ai', 'analyses'] });
       onScanComplete?.(scanData, analysisId);
+      hideLoader();
       toast.success(
         scanData.severity === 'healthy'
           ? `✅ ${scanData.plantName} looks healthy!`
@@ -468,6 +472,7 @@ export default function CropScanner({ onScanComplete, cropId }: CropScannerProps
       );
     },
     onError: (err: unknown) => {
+      hideLoader();
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
         'AI scan failed. Please try again.';

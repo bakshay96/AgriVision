@@ -42,6 +42,7 @@ interface AppState {
 
   // UI
   isSidebarOpen: boolean;
+  isSidebarCollapsed: boolean;
   isAnalyzing: boolean; // AI processing state
   uploadProgress: number;
 
@@ -54,6 +55,8 @@ interface AppState {
   clearNotifications: () => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
+  toggleSidebarCollapse: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   setIsAnalyzing: (analyzing: boolean) => void;
   setUploadProgress: (progress: number) => void;
 }
@@ -76,6 +79,7 @@ export const useAppStore = create<AppState>()(
 
       // UI state
       isSidebarOpen: true,
+      isSidebarCollapsed: false,
       isAnalyzing: false,
       uploadProgress: 0,
 
@@ -129,6 +133,8 @@ export const useAppStore = create<AppState>()(
       // ── UI Actions ────────────────────────────────────────────────────────
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setSidebarOpen: (open) => set({ isSidebarOpen: open }),
+      toggleSidebarCollapse: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+      setSidebarCollapsed: (collapsed) => set({ isSidebarCollapsed: collapsed }),
       setIsAnalyzing: (analyzing) => set({ isAnalyzing: analyzing }),
       setUploadProgress: (progress) => set({ uploadProgress: progress }),
     }),

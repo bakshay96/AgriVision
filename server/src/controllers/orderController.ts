@@ -239,6 +239,10 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
     shippingAddress,
     notes,
     deliveryDate,
+    verification: {
+      requestedQuantity: enrichedItems[0]?.quantity || 0,
+      quantityUnit: enrichedItems[0]?.unit || 'quintal',
+    },
   });
 
   console.log('[OrderController] ✅ Order created:', {
@@ -268,7 +272,9 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 // PATCH /api/orders/:id/status  (Farmers and Buyers can update)
 export const updateOrderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   const { status, trackingNumber } = req.body;
-  const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+  const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled',
+    // B2B statuses
+    'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit'];
   const userId = req.user!._id;
   const userRole = req.user!.role;
 
@@ -325,18 +331,29 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
   // DELIVERED: Final state
   // CANCELLED: Can be cancelled from pending/confirmed/processing states
   
-  type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' |
+    'negotiating' | 'deal_confirmed' | 'ready_for_pickup' | 'picked_up' | 'in_transit';
   const statusPermissions: Record<'farmer' | 'buyer', Record<OrderStatus, OrderStatus[]>> = {
     farmer: {
-      pending: ['confirmed', 'cancelled'],
-      confirmed: [],
+      pending: ['deal_confirmed', 'confirmed', 'cancelled'],
+      negotiating: ['deal_confirmed', 'cancelled'],
+      deal_confirmed: ['ready_for_pickup', 'cancelled'],
+      confirmed: ['processing', 'cancelled'],
       processing: [],
       shipped: [],
+      ready_for_pickup: [],
+      picked_up: [],
+      in_transit: [],
       delivered: [],
       cancelled: []
     },
     buyer: {
       pending: ['cancelled'],
+      negotiating: ['deal_confirmed', 'cancelled'],
+      deal_confirmed: ['ready_for_pickup', 'cancelled'],
+      ready_for_pickup: ['picked_up', 'cancelled'],
+      picked_up: ['in_transit', 'cancelled'],
+      in_transit: ['delivered'],
       confirmed: ['processing', 'cancelled'],
       processing: ['shipped', 'cancelled'],
       shipped: ['delivered'],
@@ -349,19 +366,7 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response): Promis
   const allowedActions = statusPermissions[roleKey][oldStatus as OrderStatus] || [];
   
   if (!allowedActions.includes(status as OrderStatus)) {
-    // Provide helpful error messages based on role and current status
-    if (userRole === 'FARMER' && oldStatus !== 'pending') {
-      throw createError(`Farmers can only confirm or cancel pending orders. Current status: ${oldStatus}`, 403);
-    }
-    if (userRole === 'BUYER') {
-      if (oldStatus === 'pending') {
-        throw createError('Please wait for the farmer to confirm this order before making changes', 403);
-      }
-      if (oldStatus === 'delivered') {
-        throw createError('This order has already been delivered', 400);
-      }
-    }
-    throw createError(`Cannot change status from ${oldStatus} to ${status}. Allowed transitions: ${allowedActions.join(', ') || 'none'}`, 403);
+    throw createError(`Cannot change status from ${oldStatus} to ${status}. Allowed: ${allowedActions.join(', ') || 'none'}`, 403);
   }
 
   // If cancelling order, restore inventory
@@ -468,7 +473,11 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
     ? (order.buyerId as any).name 
     : (order.farmerId as any).name;
 
+  // Get the saved message's ID from the messageHistory array (last element)
+  const savedMessage = order.messageHistory[order.messageHistory.length - 1] as any;
+
   const messageData = {
+    messageId: savedMessage?._id?.toString() || '',
     orderId: order._id,
     orderNumber: order.orderNumber,
     message: newMessage.message,
@@ -525,4 +534,304 @@ export const getOrderStats = async (req: AuthRequest, res: Response): Promise<vo
   ]);
 
   res.status(200).json({ success: true, data: { stats } });
+};
+
+// ─── B2B Deal Confirmation ────────────────────────────────────────────────────────────────
+export const confirmDeal = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { notes } = req.body;
+  const userId = req.user!._id;
+  const userRole = req.user!.role;
+  
+  const order = await Order.findOne({
+    _id: id,
+    isActive: true,
+    $or: [{ farmerId: userId }, { buyerId: userId }]
+  });
+  
+  if (!order) throw createError('Order not found or unauthorized', 404);
+  
+  const isFarmer = order.farmerId.toString() === userId.toString();
+  
+  if (!isFarmer && userRole !== 'BUYER') {
+    throw createError('Only the buyer or farmer can confirm this deal', 403);
+  }
+  
+  // Prevent confirming already-cancelled or delivered orders
+  if (['cancelled', 'delivered'].includes(order.status)) {
+    throw createError('Cannot confirm a cancelled or delivered order', 400);
+  }
+
+  // Update deal confirmation status
+  if (isFarmer) {
+    order.dealConfirmation.farmerConfirmedAt = new Date();
+    order.dealConfirmation.farmerNotes = notes;
+  } else {
+    order.dealConfirmation.buyerConfirmedAt = new Date();
+    order.dealConfirmation.buyerNotes = notes;
+  }
+  
+  // Determine new confirmation status and advance order status
+  if (order.dealConfirmation.buyerConfirmedAt && order.dealConfirmation.farmerConfirmedAt) {
+    // Both confirmed → ready for pickup
+    order.dealConfirmation.status = 'both_confirmed';
+    order.status = 'ready_for_pickup';
+  } else if (order.dealConfirmation.farmerConfirmedAt) {
+    // Farmer confirmed → move order to deal_confirmed (key fix)
+    order.dealConfirmation.status = 'farmer_confirmed';
+    if (['pending', 'negotiating'].includes(order.status)) {
+      order.status = 'deal_confirmed';
+    }
+  } else if (order.dealConfirmation.buyerConfirmedAt) {
+    order.dealConfirmation.status = 'buyer_confirmed';
+    if (['pending', 'negotiating'].includes(order.status)) {
+      order.status = 'deal_confirmed';
+    }
+  }
+  
+  // Add to message history
+  order.messageHistory.push({
+    senderId: userId,
+    message: `${userRole}: Deal confirmed${notes ? ` - ${notes}` : ''} — Order status: ${order.status}`,
+    timestamp: new Date()
+  });
+  
+  await order.save();
+
+  console.log('[OrderController] ✅ confirmDeal:', {
+    orderId: order._id.toString(),
+    orderNumber: order.orderNumber,
+    confirmedBy: userRole,
+    dealConfirmationStatus: order.dealConfirmation.status,
+    orderStatus: order.status,
+  });
+  
+  // Emit update to other party
+  const otherPartyId = isFarmer ? order.buyerId.toString() : order.farmerId.toString();
+  emitOrderStatusUpdate(otherPartyId, {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    dealConfirmation: order.dealConfirmation,
+    message: `Deal confirmed by ${userRole}`,
+  });
+  // Also notify the confirming party
+  emitOrderStatusUpdate(userId.toString(), {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    dealConfirmation: order.dealConfirmation,
+    message: `You confirmed the deal`,
+  });
+  
+  res.status(200).json({ 
+    success: true, 
+    message: 'Deal confirmed successfully', 
+    data: { order } 
+  });
+};
+
+// ─── Update Procurement Details ───────────────────────────────────────────────────────────
+export const updateProcurement = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { arrangedBy, transporterName, transporterContact, vehicleNumber, pickupScheduledAt } = req.body;
+  const userId = req.user!._id;
+  const userRole = req.user!.role;
+  
+  const order = await Order.findOne({
+    _id: id,
+    isActive: true,
+    $or: [{ farmerId: userId }, { buyerId: userId }]
+  });
+  
+  if (!order) throw createError('Order not found or unauthorized', 404);
+  
+  // Update procurement details
+  if (arrangedBy) order.procurement.arrangedBy = arrangedBy;
+  if (transporterName) order.procurement.transporterName = transporterName;
+  if (transporterContact) order.procurement.transporterContact = transporterContact;
+  if (vehicleNumber) order.procurement.vehicleNumber = vehicleNumber;
+  if (pickupScheduledAt) order.procurement.pickupScheduledAt = new Date(pickupScheduledAt);
+  
+  // Add to message history
+  order.messageHistory.push({
+    senderId: userId,
+    message: `${userRole}: Procurement details updated - Pickup scheduled`,
+    timestamp: new Date()
+  });
+  
+  await order.save();
+  
+  res.status(200).json({ 
+    success: true, 
+    message: 'Procurement details updated', 
+    data: { order } 
+  });
+};
+
+// ─── Verify Weight/Quantity at Pickup ─────────────────────────────────────────────────────
+export const verifyPickup = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { actualQuantity, qualityGrade, qualityCheckPassed, verificationNotes } = req.body;
+  const userId = req.user!._id;
+  const userRole = req.user!.role;
+  
+  const order = await Order.findOne({
+    _id: id,
+    isActive: true,
+    $or: [{ farmerId: userId }, { buyerId: userId }]
+  });
+  
+  if (!order) throw createError('Order not found or unauthorized', 404);
+  
+  // Only buyer can verify pickup (as they're arranging transport)
+  if (userRole !== 'BUYER') {
+    throw createError('Only the buyer can verify pickup details', 403);
+  }
+  
+  // Update verification details
+  order.verification.actualQuantity = actualQuantity;
+  order.verification.qualityGrade = qualityGrade;
+  order.verification.qualityCheckPassed = qualityCheckPassed;
+  order.verification.verificationNotes = verificationNotes;
+  order.verification.verifiedAt = new Date();
+  order.verification.verifiedBy = userId;
+  
+  // Update order status
+  order.status = 'picked_up';
+  order.procurement.actualPickupAt = new Date();
+  
+  // Recalculate total if quantity changed
+  const requestedQty = order.verification?.requestedQuantity || order.items[0]?.quantity || 0;
+  if (actualQuantity && actualQuantity !== requestedQty) {
+    const newTotal = actualQuantity * (order.agreedPricePerUnit || order.items[0].pricePerUnit);
+    order.totalAmount = newTotal;
+    order.items[0].totalPrice = newTotal;
+    order.items[0].quantity = actualQuantity;
+  }
+  
+  // Add to message history
+  const quantityUnit = order.verification?.quantityUnit || order.items[0]?.unit || 'quintal';
+  order.messageHistory.push({
+    senderId: userId,
+    message: `${userRole}: Pickup verified - Actual quantity: ${actualQuantity} ${quantityUnit}, Quality: ${qualityGrade}`,
+    timestamp: new Date()
+  });
+  
+  await order.save();
+  
+  // Notify farmer
+  emitOrderStatusUpdate(order.farmerId.toString(), {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    message: `Pickup verified by buyer`,
+  });
+  
+  res.status(200).json({ 
+    success: true, 
+    message: 'Pickup verified successfully', 
+    data: { order } 
+  });
+};
+
+// ─── Mark In Transit ──────────────────────────────────────────────────────────────────────
+export const markInTransit = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { trackingNumber, estimatedDeliveryDate } = req.body;
+  const userId = req.user!._id;
+  const userRole = req.user!.role;
+  
+  const order = await Order.findOne({
+    _id: id,
+    isActive: true,
+    buyerId: userId
+  });
+  
+  if (!order) throw createError('Order not found or unauthorized', 404);
+  
+  if (order.status !== 'picked_up') {
+    throw createError('Order must be picked up before marking as in transit', 400);
+  }
+  
+  order.status = 'in_transit';
+  if (trackingNumber) order.trackingNumber = trackingNumber;
+  if (estimatedDeliveryDate) order.delivery.estimatedDeliveryDate = new Date(estimatedDeliveryDate);
+  
+  order.messageHistory.push({
+    senderId: userId,
+    message: `${userRole}: Order marked as In Transit${trackingNumber ? ` - Tracking: ${trackingNumber}` : ''}`,
+    timestamp: new Date()
+  });
+  
+  await order.save();
+  
+  // Notify farmer
+  emitOrderStatusUpdate(order.farmerId.toString(), {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    message: `Order is now in transit`,
+  });
+  
+  res.status(200).json({ 
+    success: true, 
+    message: 'Order marked as in transit', 
+    data: { order } 
+  });
+};
+
+// ─── Mark Delivered ───────────────────────────────────────────────────────────────────────
+export const markDelivered = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { deliveryNotes } = req.body;
+  const userId = req.user!._id;
+  const userRole = req.user!.role;
+  
+  const order = await Order.findOne({
+    _id: id,
+    isActive: true,
+    buyerId: userId
+  });
+  
+  if (!order) throw createError('Order not found or unauthorized', 404);
+  
+  if (order.status !== 'in_transit' && order.status !== 'picked_up') {
+    throw createError('Order must be in transit before marking as delivered', 400);
+  }
+  
+  order.status = 'delivered';
+  order.delivery.actualDeliveryDate = new Date();
+  if (deliveryNotes) order.delivery.deliveryNotes = deliveryNotes;
+  
+  order.messageHistory.push({
+    senderId: userId,
+    message: `${userRole}: Order marked as Delivered${deliveryNotes ? ` - ${deliveryNotes}` : ''}`,
+    timestamp: new Date()
+  });
+  
+  await order.save();
+  
+  // Update inventory total orders
+  for (const item of order.items) {
+    const inventory = await Inventory.findById(item.inventoryId);
+    if (inventory) {
+      inventory.totalOrders += 1;
+      await inventory.save();
+    }
+  }
+  
+  // Notify farmer
+  emitOrderStatusUpdate(order.farmerId.toString(), {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    message: `Order delivered successfully`,
+  });
+  
+  res.status(200).json({ 
+    success: true, 
+    message: 'Order marked as delivered', 
+    data: { order } 
+  });
 };

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Toaster } from 'sonner';
 
 import { ThemeProvider } from 'next-themes';
+import { GlobalLoader } from '@/components/ui/GlobalLoader';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -24,6 +25,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <GlobalLoader />
         {children}
         <Toaster
           position="top-right"

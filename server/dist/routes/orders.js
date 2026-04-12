@@ -11,5 +11,11 @@ router.route('/').get(orderController_1.getOrders).post(orderController_1.create
 router.get('/:id', orderController_1.getOrderById);
 router.patch('/:id/status', orderController_1.updateOrderStatus);
 router.post('/:id/messages', orderController_1.sendMessage);
+// B2B Deal Management Routes
+router.post('/:id/confirm-deal', orderController_1.confirmDeal);
+router.post('/:id/procurement', orderController_1.updateProcurement);
+router.post('/:id/verify-pickup', orderController_1.verifyPickup);
+router.post('/:id/mark-in-transit', orderController_1.markInTransit);
+router.post('/:id/mark-delivered', orderController_1.markDelivered);
 exports.default = router;
 //# sourceMappingURL=orders.js.map

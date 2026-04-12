@@ -33,11 +33,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PAYMENT_STATUSES = exports.ORDER_STATUSES = void 0;
+exports.DEAL_CONFIRMATION_STATUS = exports.PAYMENT_STATUSES = exports.ORDER_STATUSES = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 // ─── Strict Enums ───────────────────────────────────────────────────────────────────────
-exports.ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+exports.ORDER_STATUSES = ['pending', 'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit', 'delivered', 'cancelled'];
 exports.PAYMENT_STATUSES = ['pending', 'paid', 'failed', 'refunded'];
+exports.DEAL_CONFIRMATION_STATUS = ['pending', 'buyer_confirmed', 'farmer_confirmed', 'both_confirmed'];
 const OrderItemSchema = new mongoose_1.Schema({
     inventoryId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Inventory', required: true },
     cropName: { type: String, required: true },
@@ -99,6 +100,54 @@ const OrderSchema = new mongoose_1.Schema({
             timestamp: { type: Date, default: Date.now }
         }],
     isActive: { type: Boolean, default: true },
+    // ─── B2B Deal Management Fields ──────────────────────────────────────────────────────
+    // Deal Confirmation
+    dealConfirmation: {
+        status: {
+            type: String,
+            enum: exports.DEAL_CONFIRMATION_STATUS,
+            default: 'pending',
+        },
+        buyerConfirmedAt: { type: Date },
+        farmerConfirmedAt: { type: Date },
+        buyerNotes: { type: String, maxlength: 500 },
+        farmerNotes: { type: String, maxlength: 500 },
+    },
+    // Negotiation reference
+    negotiationId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Negotiation' },
+    agreedPricePerUnit: { type: Number, min: 0 },
+    agreedQuantity: { type: Number, min: 0 },
+    // Procurement & Pickup
+    procurement: {
+        arrangedBy: {
+            type: String,
+            enum: ['buyer', 'farmer', 'third_party'],
+            default: 'buyer',
+        },
+        transporterName: { type: String },
+        transporterContact: { type: String },
+        vehicleNumber: { type: String },
+        pickupScheduledAt: { type: Date },
+        actualPickupAt: { type: Date },
+    },
+    // Weight/Quantity Verification at Pickup
+    verification: {
+        requestedQuantity: { type: Number, min: 0.01 },
+        actualQuantity: { type: Number, min: 0 },
+        quantityUnit: { type: String, required: true, default: 'quintal' },
+        verifiedAt: { type: Date },
+        verifiedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' },
+        verificationNotes: { type: String, maxlength: 500 },
+        qualityGrade: { type: String },
+        qualityCheckPassed: { type: Boolean },
+    },
+    // Delivery tracking
+    delivery: {
+        estimatedDeliveryDate: { type: Date },
+        actualDeliveryDate: { type: Date },
+        deliveryNotes: { type: String, maxlength: 500 },
+        proofOfDelivery: [{ type: String }], // Image URLs
+    },
 }, {
     timestamps: true,
     toJSON: { virtuals: true },

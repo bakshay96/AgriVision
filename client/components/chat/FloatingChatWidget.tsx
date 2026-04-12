@@ -286,9 +286,11 @@ export default function FloatingChatWidget({
           <div className="flex items-center justify-center gap-2">
             <Maximize2 className="h-4 w-4" />
             <span>Click to expand</span>
-            <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs">
-              {session.messages.length} messages
-            </span>
+            {session.unreadCount > 0 && (
+              <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs font-bold animate-pulse">
+                {session.unreadCount} new
+              </span>
+            )}
           </div>
         </div>
       ) : (

@@ -30,13 +30,19 @@ const upload = (0, multer_1.default)({
 // ─────────────────────────────────────────────────────────────────────────────
 // Upload Routes
 // ─────────────────────────────────────────────────────────────────────────────
+// Public proxy route for short URLs
+router.get('/raw/:id', uploadController_1.proxyImage);
 // Get upload configuration (public)
 router.get('/config', uploadController_1.getUploadConfiguration);
+// Get user's uploaded images (private)
+router.get('/my-images', auth_1.protect, uploadController_1.getMyImages);
 // Upload single image (private)
 router.post('/image', auth_1.protect, upload.single('image'), uploadController_1.uploadImage);
 // Upload multiple images (private)
 router.post('/images', auth_1.protect, upload.array('images', 5), uploadController_1.uploadMultipleImages);
 // Upload and analyze crop image (private)
 router.post('/analyze', auth_1.protect, upload.single('image'), uploadController_1.uploadAndAnalyze);
+// Delete image from S3 and DB (private)
+router.delete('/:id', auth_1.protect, uploadController_1.deleteUpload);
 exports.default = router;
 //# sourceMappingURL=upload.js.map

@@ -15,7 +15,8 @@ export const useSocket = () => {
   const { user, addNotification } = useAppStore();
   const socketRef = useRef<Socket | null>(null);
   const queryClient = useQueryClient();
-  const { addUnreadMessage, sessions, isChatOpen } = useChatStore();
+  const { addUnreadMessage, sessions, isChatOpen, updateChatMessages, appendChatMessage } = useChatStore();
+  const currentUserId = user?._id?.toString();
 
   useEffect(() => {
     if (!user) return;
@@ -66,48 +67,66 @@ export const useSocket = () => {
       const orderNumber = String(payload.orderNumber || '');
       const senderRole = String(payload.senderRole || 'BUYER');
       const messageText = String(payload.message || '').substring(0, 50) || 'New message';
-      
-      // Add to unread messages
-      const unreadInfo: UnreadMessageInfo = {
-        orderId,
-        orderNumber,
-        otherPartyName: senderName,
-        otherPartyRole: senderRole === 'FARMER' ? 'FARMER' : 'BUYER',
-        unreadCount: 1,
-        lastMessage: messageText,
-        lastMessageTime: data.timestamp,
-      };
-      
-      // Check if chat is open and visible
+      const senderId = String(payload.senderId || '');
+      const fullMessage = String(payload.message || '');
+      const timestamp = String(payload.timestamp || data.timestamp || new Date().toISOString());
+
+      // ── Always push the message into the open session for live rendering ──
+      // This makes both sender and receiver see new messages in real-time.
       const session = sessions.find(s => s.orderId === orderId);
+      if (session) {
+        appendChatMessage(orderId, {
+          _id: String(payload.messageId || ''),
+          senderId,
+          senderName,
+          senderRole,
+          message: fullMessage,
+          timestamp,
+        });
+      }
+
+      // ── Skip unread tracking if the message is from the current user ──
+      if (senderId && currentUserId && senderId === currentUserId) {
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+        queryClient.invalidateQueries({ queryKey: ['orders-recent-chat'] });
+        return;
+      }
+
+      // ── Add to unread only if the chat is not currently open & visible ──
       const isVisible = session && !session.isMinimized;
-      
       if (!isVisible) {
-        // Only add to unread if chat is not visible
+        const unreadInfo: UnreadMessageInfo = {
+          orderId,
+          orderNumber,
+          otherPartyName: senderName,
+          otherPartyRole: senderRole === 'FARMER' ? 'FARMER' : 'BUYER',
+          unreadCount: 1,
+          lastMessage: messageText,
+          lastMessageTime: data.timestamp,
+        };
         addUnreadMessage(unreadInfo);
       }
-      
+
       const msg = `💬 ${senderName}: ${messageText}`;
-      addNotification({ 
-        type: 'NEW_MESSAGE', 
-        message: msg, 
-        payload, 
-        timestamp: data.timestamp 
+      addNotification({
+        type: 'NEW_MESSAGE',
+        message: msg,
+        payload,
+        timestamp: data.timestamp
       });
-      
-      // Show toast notification
-      toast.success(msg, { 
+
+      // Show toast notification (only for messages from others)
+      toast.success(msg, {
         icon: '💬',
         duration: 5000,
         action: {
           label: 'Reply',
           onClick: () => {
-            // Will navigate to orders where they can open chat
             window.location.href = '/orders';
           },
         },
       });
-      
+
       // Invalidate orders query to refetch messages
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['orders-recent-chat'] });
@@ -126,11 +145,40 @@ export const useSocket = () => {
       toast.success(msg, { icon: '🤖' });
     };
 
+    const handleNegotiationUpdate = (data: { payload: Record<string, unknown>; timestamp: string }) => {
+      const { payload } = data;
+      const action = String(payload.action || '');
+      const negId = String(payload.negotiationId || '');
+
+      // Invalidate negotiation queries for real-time refresh
+      queryClient.invalidateQueries({ queryKey: ['negotiations'] });
+      queryClient.invalidateQueries({ queryKey: ['negotiation-detail', negId] });
+      queryClient.invalidateQueries({ queryKey: ['negotiations', 'widget'] });
+
+      if (action === 'message') {
+        // Silent update — just refresh data
+      } else if (action === 'accepted') {
+        const msg = 'Negotiation accepted — order has been created!';
+        addNotification({ type: 'ORDER_STATUS_UPDATE', message: msg, payload, timestamp: data.timestamp });
+        toast.success(msg, { icon: '🤝', duration: 6000, action: { label: 'Orders', onClick: () => { window.location.href = '/orders'; } } });
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+      } else if (action === 'counter') {
+        const msg = 'Counter offer received on your negotiation';
+        addNotification({ type: 'ORDER_STATUS_UPDATE', message: msg, payload, timestamp: data.timestamp });
+        toast.info(msg, { icon: '💰', duration: 5000, action: { label: 'View', onClick: () => { window.location.href = '/negotiations'; } } });
+      } else if (action === 'rejected') {
+        const msg = 'A negotiation has been rejected';
+        addNotification({ type: 'ORDER_STATUS_UPDATE', message: msg, payload, timestamp: data.timestamp });
+        toast.error(msg, { icon: '❌' });
+      }
+    };
+
     socket.on('new_order', handleNewOrder);
     socket.on('order_status_update', handleOrderUpdate);
     socket.on('new_message', handleNewMessage);
     socket.on('crop_alert', handleCropAlert);
     socket.on('ai_analysis_complete', handleAIComplete);
+    socket.on('negotiation_update', handleNegotiationUpdate);
 
     return () => {
       socket.off('new_order', handleNewOrder);
@@ -138,8 +186,9 @@ export const useSocket = () => {
       socket.off('new_message', handleNewMessage);
       socket.off('crop_alert', handleCropAlert);
       socket.off('ai_analysis_complete', handleAIComplete);
+      socket.off('negotiation_update', handleNegotiationUpdate);
     };
-  }, [user, addNotification, queryClient, addUnreadMessage, sessions]);
+  }, [user, addNotification, queryClient, addUnreadMessage, sessions, currentUserId, updateChatMessages, appendChatMessage]);
 
   return socketRef.current;
 };

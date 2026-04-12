@@ -21,6 +21,7 @@ import OrderChat from '@/components/orders/OrderChat';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useAppStore } from '@/store/useAppStore';
 import { useFloatingChat } from '@/hooks/useFloatingChat';
+import { useLoader } from '@/hooks/useLoader';
 
 interface InventoryItem {
   _id: string;
@@ -60,6 +61,7 @@ export default function InventoryPage() {
   const { t } = useLanguageStore();
   const queryClient = useQueryClient();
   const { user } = useAppStore();
+  const { showLoader, hideLoader } = useLoader();
   const userRole = user?.role?.toUpperCase() || 'FARMER';
   const { openFloatingChat } = useFloatingChat();
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,11 +115,16 @@ export default function InventoryPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => inventoryApi.remove(id),
+    onMutate: () => {
+      showLoader({ variant: 'saving', message: 'Deleting Item...' });
+    },
     onSuccess: () => {
+      hideLoader();
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       toast.success('Item removed successfully');
     },
     onError: (error: any) => {
+      hideLoader();
       showErrorToast(error, 'Delete Failed');
     },
   });
@@ -732,6 +739,7 @@ function InventoryModal({
   item: InventoryItem | null;
 }) {
   const queryClient = useQueryClient();
+  const { showLoader, hideLoader } = useLoader();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Location dropdown state
@@ -741,47 +749,99 @@ function InventoryModal({
   const [availableTalukas, setAvailableTalukas] = useState<string[]>([]);
   
   const [formData, setFormData] = useState({
-    cropName: item?.cropName || '',
-    variety: item?.variety || '',
-    quantity: item?.quantity || '',
-    unit: item?.unit || 'quintal',
-    pricePerUnit: item?.pricePerUnit || '',
-    minimumOrderQuantity: item?.minimumOrderQuantity || 1,
+    cropName: '',
+    variety: '',
+    quantity: 0,
+    unit: 'quintal',
+    pricePerUnit: 0,
+    minimumOrderQuantity: 1,
     location: {
-      address: item?.location?.address || '',
-      city: item?.location?.city || '',
-      district: item?.location?.district || '',
-      taluka: item?.location?.taluka || '',
-      state: item?.location?.state || '',
-      country: item?.location?.country || 'IN',
-      pin: item?.location?.pin || '',
+      address: '',
+      city: '',
+      district: '',
+      taluka: '',
+      state: '',
+      country: 'IN',
+      pin: '',
     },
-    description: item?.description || '',
-    certifications: item?.certifications || [] as string[],
-    images: item?.images || [] as string[],
+    description: '',
+    certifications: [] as string[],
+    images: [] as string[],
   });
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [previewImages, setPreviewImages] = useState<string[]>(item?.images || []);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
 
-  // Initialize districts and talukas when editing
+  // Reset form data when item changes (for edit mode)
   useEffect(() => {
-    if (item && item.location) {
-      const state = item.location.state;
-      const district = (item.location as any).district || '';
-      
-      if (state) {
-        setSelectedState(state);
-        const districts = getDistrictsByState(state);
-        setAvailableDistricts(districts);
-        
-        if (district) {
-          setSelectedDistrict(district);
-          const talukas = getTalukasByDistrict(state, district);
-          setAvailableTalukas(talukas);
-        }
-      }
+    if (item) {
+      setFormData({
+        cropName: item.cropName || '',
+        variety: item.variety || '',
+        quantity: Number(item.quantity) || 0,
+        unit: item.unit || 'quintal',
+        pricePerUnit: Number(item.pricePerUnit) || 0,
+        minimumOrderQuantity: item.minimumOrderQuantity || 1,
+        location: {
+          address: item.location?.address || '',
+          city: item.location?.city || '',
+          district: (item.location as any)?.district || '',
+          taluka: (item.location as any)?.taluka || '',
+          state: item.location?.state || '',
+          country: item.location?.country || 'IN',
+          pin: item.location?.pin || '',
+        },
+        description: item.description || '',
+        certifications: item.certifications || [],
+        images: item.images || [],
+      });
+      setPreviewImages(item.images || []);
+    } else {
+      // Reset for add mode
+      setFormData({
+        cropName: '',
+        variety: '',
+        quantity: '',
+        unit: 'quintal',
+        pricePerUnit: '',
+        minimumOrderQuantity: 1,
+        location: {
+          address: '',
+          city: '',
+          district: '',
+          taluka: '',
+          state: '',
+          country: 'IN',
+          pin: '',
+        },
+        description: '',
+        certifications: [],
+        images: [],
+      });
+      setPreviewImages([]);
+      setSelectedState('');
+      setSelectedDistrict('');
+      setAvailableDistricts([]);
+      setAvailableTalukas([]);
     }
-  }, [item]);
+  }, [item, isOpen]);
+
+  // Initialize districts and talukas when form data changes (for editing)
+  useEffect(() => {
+    const state = formData.location.state;
+    const district = formData.location.district;
+    
+    if (state && state !== selectedState) {
+      setSelectedState(state);
+      const districts = getDistrictsByState(state);
+      setAvailableDistricts(districts);
+    }
+    
+    if (district && district !== selectedDistrict && state) {
+      setSelectedDistrict(district);
+      const talukas = getTalukasByDistrict(state, district);
+      setAvailableTalukas(talukas);
+    }
+  }, [formData.location.state, formData.location.district]);
 
   // Handle state selection
   const handleStateChange = (state: string) => {
@@ -831,22 +891,36 @@ function InventoryModal({
 
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) => inventoryApi.create(data),
+    onMutate: () => {
+      showLoader({ variant: 'saving', message: 'Creating Item...' });
+    },
     onSuccess: () => {
+      hideLoader();
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       toast.success('Item created successfully');
       onClose();
     },
-    onError: (error) => showErrorToast(error, 'Create Failed'),
+    onError: (error) => {
+      hideLoader();
+      showErrorToast(error, 'Create Failed');
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: typeof formData) => inventoryApi.update(item!._id, data),
+    onMutate: () => {
+      showLoader({ variant: 'saving', message: 'Updating Item...' });
+    },
     onSuccess: () => {
+      hideLoader();
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       toast.success('Item updated successfully');
       onClose();
     },
-    onError: (error) => showErrorToast(error, 'Update Failed'),
+    onError: (error) => {
+      hideLoader();
+      showErrorToast(error, 'Update Failed');
+    },
   });
 
   // Handle image file selection and upload
@@ -863,6 +937,7 @@ function InventoryModal({
     }
 
     setUploadingImages(true);
+    showLoader({ variant: 'upload', message: 'Uploading Images...' });
     const newImages: string[] = [];
     const newPreviews: string[] = [...previewImages];
 
@@ -904,6 +979,7 @@ function InventoryModal({
       toast.error('Failed to upload images');
     } finally {
       setUploadingImages(false);
+      hideLoader();
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
