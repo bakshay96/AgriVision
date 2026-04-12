@@ -37,13 +37,23 @@ interface Negotiation {
   agreedPricePerUnit?: number;
   agreedQuantity?: number;
   originalPricePerUnit: number;
+  originalQuantity: number;
   proposedBy: 'buyer' | 'farmer';
   counterBy?: 'buyer' | 'farmer';
   messages: NegotiationMessage[];
-  inventoryId?: { _id: string; cropName: string; variety?: string; unit?: string; images?: string[] };
-  buyerId?: { _id: string; name: string; email?: string; phoneNumber?: string };
-  farmerId?: { _id: string; name: string; farmName?: string; email?: string; phoneNumber?: string };
+  inventoryId?: { 
+    _id: string; 
+    cropName: string; 
+    variety: string; 
+    unit: string; 
+    images?: string[];
+    location?: { address: string };
+    pricePerUnit: number;
+  };
+  buyerId?: { _id: string; name: string; email: string; phoneNumber?: string };
+  farmerId?: { _id: string; name: string; farmName?: string; email: string; phoneNumber?: string };
   createdAt: string;
+  expiresAt: string;
   orderId?: string;
 }
 

@@ -232,7 +232,7 @@ export default function WeatherWidget({ crops = [] }: WeatherWidgetProps) {
     if (weather.current.condition === 'Rain' || weather.current.condition === 'Thunderstorm') {
       alerts.push({ type: 'warning', icon: <Droplets className="h-4 w-4 text-amber-400" />, text: t('heavyRain') });
     }
-    if (weather.current.windSpeed > 30) {
+    if ((weather.current.windSpeed || weather.current.windspeed || 0) > 30) {
       alerts.push({ type: 'warning', icon: <Wind className="h-4 w-4 text-amber-400" />, text: t('highWind') });
     }
     return alerts;
@@ -320,7 +320,7 @@ export default function WeatherWidget({ crops = [] }: WeatherWidgetProps) {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { icon: Droplets, value: `${weather.current.humidity}%`, label: t('humidity') },
-                    { icon: Wind, value: `${Math.round(weather.current.windSpeed)} km/h`, label: t('windSpeed') },
+                    { icon: Wind, value: `${Math.round(weather.current.windSpeed || weather.current.windspeed || 0)} km/h`, label: t('windSpeed') },
                     { icon: Gauge, value: `${Math.round(weather.current.pressure)} hPa`, label: t('pressure') },
                     { icon: Eye, value: `${weather.current.visibility.toFixed(1)} km`, label: t('visibility') },
                   ].map((item, idx) => (

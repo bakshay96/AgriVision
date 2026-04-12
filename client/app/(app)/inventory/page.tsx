@@ -800,9 +800,9 @@ function InventoryModal({
       setFormData({
         cropName: '',
         variety: '',
-        quantity: '',
+        quantity: 0,
         unit: 'quintal',
-        pricePerUnit: '',
+        pricePerUnit: 0,
         minimumOrderQuantity: 1,
         location: {
           address: '',
