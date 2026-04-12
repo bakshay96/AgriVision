@@ -406,7 +406,10 @@ const sendMessage = async (req, res) => {
     const recipientName = isFarmer
         ? order.buyerId.name
         : order.farmerId.name;
+    // Get the saved message's ID from the messageHistory array (last element)
+    const savedMessage = order.messageHistory[order.messageHistory.length - 1];
     const messageData = {
+        messageId: savedMessage?._id?.toString() || '',
         orderId: order._id,
         orderNumber: order.orderNumber,
         message: newMessage.message,
@@ -477,6 +480,10 @@ const confirmDeal = async (req, res) => {
     if (!isFarmer && userRole !== 'BUYER') {
         throw (0, errorHandler_1.createError)('Only the buyer or farmer can confirm this deal', 403);
     }
+    // Prevent confirming already-cancelled or delivered orders
+    if (['cancelled', 'delivered'].includes(order.status)) {
+        throw (0, errorHandler_1.createError)('Cannot confirm a cancelled or delivered order', 400);
+    }
     // Update deal confirmation status
     if (isFarmer) {
         order.dealConfirmation.farmerConfirmedAt = new Date();
@@ -486,25 +493,40 @@ const confirmDeal = async (req, res) => {
         order.dealConfirmation.buyerConfirmedAt = new Date();
         order.dealConfirmation.buyerNotes = notes;
     }
-    // Determine new confirmation status
+    // Determine new confirmation status and advance order status
     if (order.dealConfirmation.buyerConfirmedAt && order.dealConfirmation.farmerConfirmedAt) {
+        // Both confirmed → ready for pickup
         order.dealConfirmation.status = 'both_confirmed';
         order.status = 'ready_for_pickup';
     }
+    else if (order.dealConfirmation.farmerConfirmedAt) {
+        // Farmer confirmed → move order to deal_confirmed (key fix)
+        order.dealConfirmation.status = 'farmer_confirmed';
+        if (['pending', 'negotiating'].includes(order.status)) {
+            order.status = 'deal_confirmed';
+        }
+    }
     else if (order.dealConfirmation.buyerConfirmedAt) {
         order.dealConfirmation.status = 'buyer_confirmed';
-    }
-    else if (order.dealConfirmation.farmerConfirmedAt) {
-        order.dealConfirmation.status = 'farmer_confirmed';
+        if (['pending', 'negotiating'].includes(order.status)) {
+            order.status = 'deal_confirmed';
+        }
     }
     // Add to message history
     order.messageHistory.push({
         senderId: userId,
-        message: `${userRole}: Deal confirmed${notes ? ` - ${notes}` : ''}`,
+        message: `${userRole}: Deal confirmed${notes ? ` - ${notes}` : ''} — Order status: ${order.status}`,
         timestamp: new Date()
     });
     await order.save();
-    // Emit update
+    console.log('[OrderController] ✅ confirmDeal:', {
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        confirmedBy: userRole,
+        dealConfirmationStatus: order.dealConfirmation.status,
+        orderStatus: order.status,
+    });
+    // Emit update to other party
     const otherPartyId = isFarmer ? order.buyerId.toString() : order.farmerId.toString();
     (0, socketService_1.emitOrderStatusUpdate)(otherPartyId, {
         orderId: order._id,
@@ -512,6 +534,14 @@ const confirmDeal = async (req, res) => {
         status: order.status,
         dealConfirmation: order.dealConfirmation,
         message: `Deal confirmed by ${userRole}`,
+    });
+    // Also notify the confirming party
+    (0, socketService_1.emitOrderStatusUpdate)(userId.toString(), {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        dealConfirmation: order.dealConfirmation,
+        message: `You confirmed the deal`,
     });
     res.status(200).json({
         success: true,

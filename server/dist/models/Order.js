@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEAL_CONFIRMATION_STATUS = exports.PAYMENT_STATUSES = exports.ORDER_STATUSES = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 // ─── Strict Enums ───────────────────────────────────────────────────────────────────────
-exports.ORDER_STATUSES = ['pending', 'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit', 'delivered', 'cancelled'];
+exports.ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit', 'delivered', 'cancelled'];
 exports.PAYMENT_STATUSES = ['pending', 'paid', 'failed', 'refunded'];
 exports.DEAL_CONFIRMATION_STATUS = ['pending', 'buyer_confirmed', 'farmer_confirmed', 'both_confirmed'];
 const OrderItemSchema = new mongoose_1.Schema({
@@ -72,13 +72,13 @@ const OrderSchema = new mongoose_1.Schema({
         default: 'pending',
     },
     shippingAddress: {
-        street: { type: String, required: true },
+        street: { type: String, required: false, default: '' },
         city: { type: String, required: true },
         district: { type: String },
         taluka: { type: String },
         state: { type: String, required: true },
         zipCode: { type: String, required: false },
-        pinCode: { type: String, required: true },
+        pinCode: { type: String, required: false, default: '' },
         country: { type: String, required: true, default: 'IN' },
     },
     deliveryDate: { type: Date },

@@ -1,5 +1,5 @@
 import mongoose, { Document } from 'mongoose';
-export declare const ORDER_STATUSES: readonly ["pending", "negotiating", "deal_confirmed", "ready_for_pickup", "picked_up", "in_transit", "delivered", "cancelled"];
+export declare const ORDER_STATUSES: readonly ["pending", "confirmed", "processing", "shipped", "negotiating", "deal_confirmed", "ready_for_pickup", "picked_up", "in_transit", "delivered", "cancelled"];
 export type OrderStatus = typeof ORDER_STATUSES[number];
 export declare const PAYMENT_STATUSES: readonly ["pending", "paid", "failed", "refunded"];
 export type PaymentStatus = typeof PAYMENT_STATUSES[number];
