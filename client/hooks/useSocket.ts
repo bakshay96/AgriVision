@@ -6,22 +6,54 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore, UnreadMessageInfo } from '@/store/useChatStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
 
+// Module-level singleton — one socket for the entire app lifetime
 let socketInstance: Socket | null = null;
 
 export const useSocket = () => {
   const { user, addNotification } = useAppStore();
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef  = useRef<Socket | null>(null);
   const queryClient = useQueryClient();
-  const { addUnreadMessage, sessions, isChatOpen, updateChatMessages, appendChatMessage } = useChatStore();
-  const currentUserId = user?._id?.toString();
 
+  // ── Chat store references via refs so that the main useEffect NEVER
+  //    re-runs just because a chat message arrived (sessions changes).
+  //    This prevents handler stacking (duplicate event listeners).
+  const addUnreadMessageRef   = useRef(useChatStore.getState().addUnreadMessage);
+  const appendChatMessageRef  = useRef(useChatStore.getState().appendChatMessage);
+  const sessionsRef           = useRef(useChatStore.getState().sessions);
+
+  // Keep refs in sync without triggering re-renders
+  useEffect(() => {
+    return useChatStore.subscribe((state) => {
+      addUnreadMessageRef.current  = state.addUnreadMessage;
+      appendChatMessageRef.current = state.appendChatMessage;
+      sessionsRef.current          = state.sessions;
+    });
+  }, []);
+
+  // ── Notification badge store (no re-render trigger on socket events)
+  const incrementNegotiationBadge = useRef(useNotificationStore.getState().incrementNegotiationBadge);
+  const incrementOrderBadge       = useRef(useNotificationStore.getState().incrementOrderBadge);
+  useEffect(() => {
+    return useNotificationStore.subscribe((state) => {
+      incrementNegotiationBadge.current = state.incrementNegotiationBadge;
+      incrementOrderBadge.current       = state.incrementOrderBadge;
+    });
+  }, []);
+
+  const currentUserIdRef = useRef(user?._id?.toString() ?? '');
+  useEffect(() => {
+    currentUserIdRef.current = user?._id?.toString() ?? '';
+  }, [user?._id]);
+
+  // ── Main socket effect — runs ONLY when user changes ────────────────────
   useEffect(() => {
     if (!user) return;
 
-    // Create or reuse singleton connection
+    // Reuse a single socket for the entire app — never create a second one
     if (!socketInstance) {
       socketInstance = io(SOCKET_URL, {
         transports: ['websocket', 'polling'],
@@ -36,63 +68,63 @@ export const useSocket = () => {
     socket.emit('join_tenant', user.tenantId);
     socket.emit('join_user', user._id);
 
-    // ── Event Handlers ────────────────────────────────────────────────────
+    // ── Event Handlers ─────────────────────────────────────────────────────
     const handleNewOrder = (data: { payload: Record<string, unknown>; timestamp: string }) => {
       const { payload } = data;
       const msg = `New order #${payload.orderNumber} from ${payload.buyerName} — ₹${payload.totalAmount}`;
       addNotification({ type: 'NEW_ORDER', message: msg, payload, timestamp: data.timestamp });
-      toast.success(msg, { 
-        icon: '🛒', 
+      toast.success(msg, {
+        icon: '🛒',
         duration: 6000,
-        action: {
-          label: 'View',
-          onClick: () => window.location.href = '/orders',
-        },
+        action: { label: 'View', onClick: () => { window.location.href = '/orders'; } },
       });
+      // Increment sidebar badge for orders
+      if (!window.location.pathname.includes('/orders')) {
+        incrementOrderBadge.current();
+      }
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
     };
 
     const handleOrderUpdate = (data: { payload: Record<string, unknown>; timestamp: string }) => {
       const { payload } = data;
-      const msg = `Order #${payload.orderNumber} is now ${String(payload.status).replace('_', ' ')}`;
+      const msg = `Order #${payload.orderNumber} is now ${String(payload.status).replace(/_/g, ' ')}`;
       addNotification({ type: 'ORDER_STATUS_UPDATE', message: msg, payload, timestamp: data.timestamp });
       toast.success(msg, { icon: '📦' });
-      // Invalidate orders query to refetch
+      // Invalidate ALL orders-related query keys so every component stays fresh
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     };
 
     const handleNewMessage = (data: { payload: Record<string, unknown>; timestamp: string }) => {
-      const { payload } = data;
-      const senderName = String(payload.senderName || 'Someone');
-      const orderId = String(payload.orderId || '');
-      const orderNumber = String(payload.orderNumber || '');
-      const senderRole = String(payload.senderRole || 'BUYER');
-      const messageText = String(payload.message || '').substring(0, 50) || 'New message';
-      const senderId = String(payload.senderId || '');
-      const fullMessage = String(payload.message || '');
-      const timestamp = String(payload.timestamp || data.timestamp || new Date().toISOString());
+      const { payload }   = data;
+      const senderName    = String(payload.senderName || 'Someone');
+      const orderId       = String(payload.orderId || '');
+      const orderNumber   = String(payload.orderNumber || '');
+      const senderRole    = String(payload.senderRole || 'BUYER');
+      const messageText   = String(payload.message || '').substring(0, 50) || 'New message';
+      const senderId      = String(payload.senderId || '');
+      const fullMessage   = String(payload.message || '');
+      const timestamp     = String(payload.timestamp || data.timestamp || new Date().toISOString());
 
-      // ── Always push the message into the open session for live rendering ──
-      // This makes both sender and receiver see new messages in real-time.
-      const session = sessions.find(s => s.orderId === orderId);
+      // ── Always append to open session for live chat rendering ──────────
+      const session = sessionsRef.current.find(s => s.orderId === orderId);
       if (session) {
-        appendChatMessage(orderId, {
-          _id: String(payload.messageId || ''),
+        appendChatMessageRef.current(orderId, {
+          _id:        String(payload.messageId || ''),
           senderId,
           senderName,
           senderRole,
-          message: fullMessage,
+          message:    fullMessage,
           timestamp,
         });
       }
 
-      // ── Skip unread tracking if the message is from the current user ──
-      if (senderId && currentUserId && senderId === currentUserId) {
+      // ── Do not count own messages as unread ────────────────────────────
+      if (senderId && currentUserIdRef.current && senderId === currentUserIdRef.current) {
         queryClient.invalidateQueries({ queryKey: ['orders'] });
-        queryClient.invalidateQueries({ queryKey: ['orders-recent-chat'] });
         return;
       }
 
-      // ── Add to unread only if the chat is not currently open & visible ──
+      // ── Add to unread only when chat is not visible ────────────────────
       const isVisible = session && !session.isMinimized;
       if (!isVisible) {
         const unreadInfo: UnreadMessageInfo = {
@@ -100,36 +132,23 @@ export const useSocket = () => {
           orderNumber,
           otherPartyName: senderName,
           otherPartyRole: senderRole === 'FARMER' ? 'FARMER' : 'BUYER',
-          unreadCount: 1,
-          lastMessage: messageText,
+          unreadCount:    1,
+          lastMessage:    messageText,
           lastMessageTime: data.timestamp,
         };
-        addUnreadMessage(unreadInfo);
+        addUnreadMessageRef.current(unreadInfo);
       }
 
       const msg = `💬 ${senderName}: ${messageText}`;
-      addNotification({
-        type: 'NEW_MESSAGE',
-        message: msg,
-        payload,
-        timestamp: data.timestamp
-      });
+      addNotification({ type: 'NEW_MESSAGE', message: msg, payload, timestamp: data.timestamp });
 
-      // Show toast notification (only for messages from others)
       toast.success(msg, {
         icon: '💬',
         duration: 5000,
-        action: {
-          label: 'Reply',
-          onClick: () => {
-            window.location.href = '/orders';
-          },
-        },
+        action: { label: 'Reply', onClick: () => { window.location.href = '/orders'; } },
       });
 
-      // Invalidate orders query to refetch messages
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['orders-recent-chat'] });
     };
 
     const handleCropAlert = (data: { payload: Record<string, unknown>; timestamp: string }) => {
@@ -147,16 +166,21 @@ export const useSocket = () => {
 
     const handleNegotiationUpdate = (data: { payload: Record<string, unknown>; timestamp: string }) => {
       const { payload } = data;
-      const action = String(payload.action || '');
-      const negId = String(payload.negotiationId || '');
+      const action  = String(payload.action || '');
+      const negId   = String(payload.negotiationId || '');
 
-      // Invalidate negotiation queries for real-time refresh
       queryClient.invalidateQueries({ queryKey: ['negotiations'] });
       queryClient.invalidateQueries({ queryKey: ['negotiation-detail', negId] });
-      queryClient.invalidateQueries({ queryKey: ['negotiations', 'widget'] });
+
+      if (action === 'new' || action === 'counter') {
+        // Add badge only if user is away from negotiations page
+        if (!window.location.pathname.includes('/negotiations')) {
+          incrementNegotiationBadge.current();
+        }
+      }
 
       if (action === 'message') {
-        // Silent update — just refresh data
+        // silent — just refresh data
       } else if (action === 'accepted') {
         const msg = 'Negotiation accepted — order has been created!';
         addNotification({ type: 'ORDER_STATUS_UPDATE', message: msg, payload, timestamp: data.timestamp });
@@ -173,22 +197,26 @@ export const useSocket = () => {
       }
     };
 
-    socket.on('new_order', handleNewOrder);
+    socket.on('new_order',           handleNewOrder);
     socket.on('order_status_update', handleOrderUpdate);
-    socket.on('new_message', handleNewMessage);
-    socket.on('crop_alert', handleCropAlert);
+    socket.on('new_message',         handleNewMessage);
+    socket.on('crop_alert',          handleCropAlert);
     socket.on('ai_analysis_complete', handleAIComplete);
-    socket.on('negotiation_update', handleNegotiationUpdate);
+    socket.on('negotiation_update',  handleNegotiationUpdate);
 
     return () => {
-      socket.off('new_order', handleNewOrder);
+      socket.off('new_order',           handleNewOrder);
       socket.off('order_status_update', handleOrderUpdate);
-      socket.off('new_message', handleNewMessage);
-      socket.off('crop_alert', handleCropAlert);
+      socket.off('new_message',         handleNewMessage);
+      socket.off('crop_alert',          handleCropAlert);
       socket.off('ai_analysis_complete', handleAIComplete);
-      socket.off('negotiation_update', handleNegotiationUpdate);
+      socket.off('negotiation_update',  handleNegotiationUpdate);
     };
-  }, [user, addNotification, queryClient, addUnreadMessage, sessions, currentUserId, updateChatMessages, appendChatMessage]);
+
+  // ⚠️ Intentionally excludes `sessions` and chat store methods from deps.
+  // They are accessed via refs, so the effect never re-runs on message receipt.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, addNotification, queryClient]);
 
   return socketRef.current;
 };

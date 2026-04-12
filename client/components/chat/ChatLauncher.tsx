@@ -24,7 +24,8 @@ export default function ChatLauncher() {
   const { data: ordersData, isLoading } = useQuery({
     queryKey: ['orders-recent-chat'],
     queryFn: () => ordersApi.getAll({ limit: 10 }).then(r => r.data.data),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 60000, // 60s fallback — socket events handle real-time invalidation
+    staleTime: 30 * 1000,
   });
 
   const orders = ordersData?.orders || [];

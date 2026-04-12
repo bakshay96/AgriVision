@@ -39,19 +39,13 @@ export default function OrderAlerts() {
 
   // Fetch pending orders that need farmer attention
   const { data: ordersData, isLoading, refetch } = useQuery({
-    queryKey: ['orders', 'alerts'],
-    queryFn: () => ordersApi.getAll({ status: 'pending', limit: 10 }).then(r => {
-      console.log('[OrderAlerts] Fetched orders:', r.data.data);
-      return r.data.data;
-    }),
-    refetchInterval: 30000, // Refresh every 30 seconds
-    refetchOnWindowFocus: true,
+    queryKey: ['orders', 'pending-alerts'],
+    queryFn: () => ordersApi.getAll({ status: 'pending', limit: 10 }).then(r => r.data.data),
+    refetchInterval: 60000, // 60s — sockets handle real-time, polling is fallback only
+    staleTime: 30 * 1000,
   });
 
   const pendingOrders: OrderAlert[] = ordersData?.orders || [];
-  
-  console.log('[OrderAlerts] User role:', user?.role, 'Pending orders count:', pendingOrders.length);
-  
   // Get recent order notifications from store
   const orderNotifications = notifications.filter(n => n.type === 'NEW_ORDER').slice(0, 5);
 

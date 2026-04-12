@@ -39,11 +39,12 @@ interface Props {
 
 export default function NegotiationsWidget({ isFarmer }: Props) {
   const { data, isLoading } = useQuery({
-    queryKey: ['negotiations', 'widget'],
+    queryKey: ['negotiations', 'all'],
     queryFn: async () => {
       const res = await negotiationApi.getAll({ limit: 5 });
       return res.data?.data?.negotiations || res.data?.negotiations || [];
     },
+    staleTime: 2 * 60 * 1000, // 2 min — dashboard widget doesn't need real-time
   });
 
   const negotiations: Negotiation[] = data || [];

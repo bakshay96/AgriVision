@@ -27,10 +27,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
-import { useQuery } from '@tanstack/react-query';
-import { negotiationApi } from '@/lib/api';
-import { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import { useEffect } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Navigation items (role-based filtering happens below)
@@ -113,63 +111,18 @@ export default function Sidebar() {
   const router = useRouter();
   const { user, isSidebarOpen, setSidebarOpen, isSidebarCollapsed, toggleSidebarCollapse, clearUser } = useAppStore();
   const { t } = useLanguageStore();
-  const [pendingNegotiationCount, setPendingNegotiationCount] = useState(0);
-  const socketRef = useRef<Socket | null>(null);
 
-  // Fetch pending negotiation count (negotiations needing this user's action)
-  const { data: negotiationsData } = useQuery({
-    queryKey: ['negotiations-badge-count'],
-    queryFn: () => negotiationApi.getAll({ status: 'pending,countered', limit: 100 }).then(r => r.data.data),
-    enabled: !!user,
-    refetchInterval: 30000,
-    staleTime: 15000,
-  });
+  // Read badge counts from the central notification store (updated by useSocket)
+  const pendingNegotiationCount = useNotificationStore(s => s.pendingNegotiationCount);
+  const pendingOrderCount       = useNotificationStore(s => s.pendingOrderCount);
+  const clearNegotiationBadge   = useNotificationStore(s => s.clearNegotiationBadge);
+  const clearOrderBadge         = useNotificationStore(s => s.clearOrderBadge);
 
-  // Compute how many negotiations need THIS user's action
+  // Clear badges when the user navigates to the relevant page
   useEffect(() => {
-    if (!negotiationsData?.negotiations || !user) return;
-    const myRole = user.role?.toLowerCase();
-    const actionRequired = negotiationsData.negotiations.filter((neg: any) => {
-      if (neg.status === 'accepted' || neg.status === 'rejected' || neg.status === 'expired') return false;
-      // If there's a counter, the non-countering party needs to respond
-      if (neg.counterBy) return neg.counterBy !== myRole;
-      // If no counter, the non-proposing party needs to respond
-      return neg.proposedBy !== myRole;
-    });
-    setPendingNegotiationCount(actionRequired.length);
-  }, [negotiationsData, user]);
-
-  // Real-time socket increment for instant feedback
-  useEffect(() => {
-    if (!user) return;
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
-    socketRef.current = socket;
-    socket.emit('join_user', user._id);
-
-    socket.on('negotiation_update', (data: any) => {
-      const action = data?.payload?.action;
-      // Only increment when a NEW negotiation or counter arrives that needs MY attention
-      if (action === 'new' || action === 'counter') {
-        // Only add badge if we are NOT already on the negotiations page
-        if (!window.location.pathname.includes('/negotiations')) {
-          setPendingNegotiationCount(prev => prev + 1);
-        }
-      }
-    });
-
-    return () => {
-      socket.off('negotiation_update');
-      socket.disconnect();
-    };
-  }, [user]);
-
-  // Clear badge when user is on the negotiations page
-  useEffect(() => {
-    if (pathname.includes('/negotiations')) {
-      setPendingNegotiationCount(0);
-    }
-  }, [pathname]);
+    if (pathname.includes('/negotiations')) clearNegotiationBadge();
+    if (pathname.includes('/orders'))       clearOrderBadge();
+  }, [pathname, clearNegotiationBadge, clearOrderBadge]);
 
   // Normalize to uppercase so both 'farmer' (old localStorage) and 'FARMER' (new) work
   const filteredNav = navItems.filter(
@@ -292,7 +245,11 @@ export default function Sidebar() {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
             const isNegotiations = item.href === '/negotiations';
-            const showBadge = isNegotiations && pendingNegotiationCount > 0;
+            const isOrders       = item.href === '/orders';
+            const showBadge =
+              (isNegotiations && pendingNegotiationCount > 0) ||
+              (isOrders && pendingOrderCount > 0);
+            const badgeCount = isNegotiations ? pendingNegotiationCount : isOrders ? pendingOrderCount : 0;
 
             return (
               <Link key={item.href} href={item.href} className="w-full">
@@ -340,7 +297,7 @@ export default function Sidebar() {
                           : "bg-red-500 text-white animate-pulse"
                       )}
                     >
-                      {pendingNegotiationCount > 9 ? '9+' : pendingNegotiationCount}
+                      {pendingNegotiationCount > 9 ? '9+' : badgeCount}
                     </motion.span>
                   ) : (
                     isActive && (

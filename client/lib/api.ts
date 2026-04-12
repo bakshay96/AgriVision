@@ -84,7 +84,7 @@ export const negotiationApi = {
   create: (data: Record<string, unknown>) => api.post('/negotiations', data),
   counter: (id: string, data: Record<string, unknown>) =>
     api.post(`/negotiations/${id}/counter`, data),
-  accept: (id: string) => api.post(`/negotiations/${id}/accept`),
+  accept: (id: string, body?: Record<string, unknown>) => api.post(`/negotiations/${id}/accept`, body || {}),
   reject: (id: string, reason?: string) =>
     api.post(`/negotiations/${id}/reject`, { reason }),
   sendMessage: (id: string, message: string) =>

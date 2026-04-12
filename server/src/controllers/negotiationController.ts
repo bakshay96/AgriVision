@@ -287,6 +287,18 @@ export const acceptNegotiation = async (req: AuthRequest, res: Response): Promis
     const acceptorIsBuyer = userRole === 'BUYER';
     const dealConfirmationStatus = acceptorIsBuyer ? 'buyer_confirmed' : 'farmer_confirmed';
 
+    // Use shipping address from request body (buyer provides delivery details) or fallback to inventory location
+    const bodyAddress = (req.body as any)?.shippingAddress;
+    const shippingAddress = {
+      street:  bodyAddress?.street  || inventory.location?.address || '',
+      city:    bodyAddress?.city    || bodyAddress?.taluka || inventory.location?.city || '',
+      district: bodyAddress?.district || '',
+      taluka:  bodyAddress?.taluka  || '',
+      state:   bodyAddress?.state   || inventory.location?.state || '',
+      pinCode: bodyAddress?.pinCode || inventory.location?.pin || '',
+      country: bodyAddress?.country || inventory.location?.country || 'IN',
+    };
+
     const order = new Order({
       tenantId,
       buyerId: negotiation.buyerId,
@@ -303,15 +315,8 @@ export const acceptNegotiation = async (req: AuthRequest, res: Response): Promis
       }],
       totalAmount: agreedQuantity * agreedPrice,
       currency: inventory.currency,
-      // Start as 'pending' so the OTHER party sees it and can confirm the deal
       status: 'pending',
-      shippingAddress: {
-        street: '',
-        city: inventory.location?.city || '',
-        state: inventory.location?.state || '',
-        pinCode: inventory.location?.pin || '',
-        country: inventory.location?.country || 'IN',
-      },
+      shippingAddress,
       agreedPricePerUnit: agreedPrice,
       agreedQuantity: agreedQuantity,
       dealConfirmation: {
