@@ -129,13 +129,13 @@ export default function AutoSwapCropCards({ crops, isLoading }: AutoSwapCropCard
 
   return (
     <div className="relative">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <Sprout className="h-4 w-4 text-emerald-500" />
+      {/* Header aligned exactly like Crop Status on the left */}
+      <div className="flex items-center justify-between mb-3 mt-1">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+          <Sprout className="h-5 w-5 text-emerald-500" />
           {language === 'mr' ? 'माझी पिके' : language === 'hi' ? 'मेरी फसलें' : 'My Crops'}
           <span className="text-xs font-normal text-slate-500">({crops.length})</span>
-        </h3>
+        </h2>
         <Link
           href="/profile"
           className="text-xs text-emerald-600 hover:text-emerald-700"

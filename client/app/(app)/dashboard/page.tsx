@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Sprout, TrendingUp, ShoppingBag, AlertTriangle, Calendar, ArrowUpRight,
@@ -76,23 +76,38 @@ export default function DashboardPage() {
   }, []);
 
   // Get crops from Crop collection OR user's selected crops
-  const cropsFromCollection = (cropsData?.crops ?? cropsData ?? []) as Array<{ healthScore?: string; status?: string; name?: string; variety?: string; _id?: string }>;
+  const cropsFromCollection = useMemo(() => 
+    (cropsData?.crops ?? cropsData ?? []) as Array<{ healthScore?: string; status?: string; name?: string; variety?: string; _id?: string }>,
+  [cropsData]);
   
   // Transform selectedCrops (array of strings) into crop-like objects for display
-  const selectedCrops = (selectedCropsData?.selectedCrops || []) as string[];
-  const cropsFromProfile = selectedCrops.map((cropName, index) => ({
-    _id: `selected-${index}`,
-    name: cropName,
-    variety: 'Standard',
-    status: 'growing',
-    healthScore: 'good',
-    fieldLocation: user?.farmName || 'Farm',
-  }));
+  const selectedCrops = useMemo(() => 
+    (selectedCropsData?.selectedCrops || []) as string[],
+  [selectedCropsData]);
+
+  const cropsFromProfile = useMemo(() => 
+    selectedCrops.map((cropName, index) => ({
+      _id: `selected-${index}`,
+      name: cropName,
+      variety: 'Standard',
+      status: 'growing',
+      healthScore: 'good',
+      fieldLocation: user?.farmName || 'Farm',
+    })),
+  [selectedCrops, user?.farmName]);
   
   // Use crops from collection if available, otherwise use selected crops from profile
-  const crops = cropsFromCollection.length > 0 ? cropsFromCollection : cropsFromProfile;
-  const recentOrders = (ordersData?.orders ?? ordersData ?? []) as Array<{ status?: string }>;
-  const aiAnalyses = (aiData?.analyses ?? aiData ?? []) as Array<unknown>;
+  const crops = useMemo(() => 
+    cropsFromCollection.length > 0 ? cropsFromCollection : cropsFromProfile,
+  [cropsFromCollection, cropsFromProfile]);
+
+  const recentOrders = useMemo(() => 
+    (ordersData?.orders ?? ordersData ?? []) as Array<{ status?: string }>,
+  [ordersData]);
+
+  const aiAnalyses = useMemo(() => 
+    (aiData?.analyses ?? aiData ?? []) as Array<unknown>,
+  [aiData]);
   
   // Debug log for crops data
   console.log('[Dashboard] Crops data:', { 
@@ -129,6 +144,20 @@ export default function DashboardPage() {
   
   // Count AI verified scans
   const aiVerifiedCount = Array.isArray(aiAnalyses) ? aiAnalyses.length : 0;
+
+  // Auto-scroll crop status slider
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!scrollRef.current || crops.length <= 1) return;
+    let currentIndex = 0;
+    const interval = setInterval(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      currentIndex = (currentIndex + 1) % crops.length;
+      el.scrollTo({ left: currentIndex * el.clientWidth, behavior: 'smooth' });
+    }, 4500); // Auto swap every 4.5 seconds
+    return () => clearInterval(interval);
+  }, [crops.length]);
 
   const stats = [
     {
@@ -260,42 +289,66 @@ export default function DashboardPage() {
                 ))}
           </motion.div>
 
-          {/* ── Main 3-column grid — 1-col mobile → 3-col desktop ───────────── */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {/* ── Crop Status (2 of 3 cols on desktop) ───────────────────────── */}
-            <motion.div variants={item} className="md:col-span-2 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('dash.cropStatus')}</h2>
-                <span className="text-xs text-slate-400 dark:text-slate-500">{crops.length} {t('dash.active')}</span>
-              </div>
+          {/* ── Dynamic Layout Group ───────────────────────────── */}
+          <div className="flex flex-col gap-6">
+            
+            {/* Top row: Crop Status Slider + Auto Swap Crop Widget */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* ── Crop Status Horizontal Slider ───────────────────────── */}
+              <motion.div variants={item} className="space-y-4 min-w-0">
+                <div className="flex items-center justify-between mb-3 mt-1">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Sprout className="h-5 w-5 text-emerald-500" />
+                    {t('dash.cropStatus')}
+                  </h2>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{crops.length} {t('dash.active')}</span>
+                </div>
 
-              {/* Crops sub-grid: 1-col → 2-col sm → 3-col xl */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {cropsLoading
-                  ? Array(6).fill(0).map((_, i) => <SkeletonCropCard key={i} />)
-                  : crops.slice(0, 6).map(
-                      (crop: Record<string, unknown>, i: number) => (
-                        <CropStatusCard key={String(crop._id)} crop={crop} index={i} />
-                      )
-                    )}
-                {!cropsLoading && crops.length === 0 && (
-                  <div className="col-span-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-10 text-center">
-                    <Sprout className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
-                    <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">No crops yet</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">
-                      Add your first crop to get started
-                    </p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
+                <div 
+                  ref={scrollRef}
+                  className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4 pb-2 w-full pl-1 scroll-smooth"
+                >
+                  {cropsLoading
+                    ? Array(3).fill(0).map((_, i) => (
+                        <div key={i} className="min-w-full snap-center shrink-0">
+                          <SkeletonCropCard />
+                        </div>
+                      ))
+                    : crops.slice(0, 6).map(
+                        (crop: Record<string, unknown>, i: number) => (
+                          <div key={String(crop._id)} className="min-w-full snap-center shrink-0 px-[1px]">
+                            <CropStatusCard crop={crop} index={i} />
+                          </div>
+                        )
+                      )}
+                  {!cropsLoading && crops.length === 0 && (
+                    <div className="min-w-full snap-center shrink-0 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-10 text-center">
+                      <Sprout className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+                      <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">No crops yet</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        Add your first crop to get started
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
 
-            {/* ── Right Column widgets (1 of 3 cols on desktop) ───────────────── */}
-            <motion.div variants={item} className="md:col-span-1 space-y-4">
-              <AutoSwapCropCards crops={crops} isLoading={cropsLoading || selectedCropsLoading} />
-              <NegotiationsWidget isFarmer={user?.role === 'FARMER'} />
-              <RecentOrdersCard orders={recentOrders} isLoading={ordersLoading} />
-            </motion.div>
+              {/* ── Right Widget (AutoSwapCropCards) ───────────────── */}
+              <motion.div variants={item} className="space-y-4">
+                <AutoSwapCropCards crops={crops} isLoading={cropsLoading || selectedCropsLoading} />
+              </motion.div>
+            </div>
+
+            {/* Next row: Negotiations & Recent Orders After above component */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <motion.div variants={item}>
+                <NegotiationsWidget isFarmer={user?.role === 'FARMER'} />
+              </motion.div>
+              <motion.div variants={item}>
+                <RecentOrdersCard orders={recentOrders} isLoading={ordersLoading} />
+              </motion.div>
+            </div>
+
           </div>
         </>
       )}

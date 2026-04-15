@@ -68,7 +68,7 @@ export const getInventory = async (req: AuthRequest, res: Response): Promise<voi
         if (!url || !url.includes('amazonaws.com')) return url;
         try {
           const key = extractKeyFromUrl(url);
-          return key ? await getPresignedUrl(key, 3600) : url;
+          return key ? await getPresignedUrl(decodeURIComponent(key), 3600) : url;
         } catch (err) {
           console.warn(`[InventoryController] ⚠️ Failed to sign URL: ${url}`, err);
           return url;
@@ -103,7 +103,7 @@ export const getMyInventory = async (req: AuthRequest, res: Response): Promise<v
         if (!url || !url.includes('amazonaws.com')) return url;
         try {
           const key = extractKeyFromUrl(url);
-          return key ? await getPresignedUrl(key, 3600) : url;
+          return key ? await getPresignedUrl(decodeURIComponent(key), 3600) : url;
         } catch (err) {
           console.warn(`[InventoryController] ⚠️ Failed to sign URL: ${url}`, err);
           return url;
@@ -227,7 +227,7 @@ export const getInventoryWithOrders = async (req: AuthRequest, res: Response): P
       if (!url || !url.includes('amazonaws.com')) return url;
       try {
         const key = extractKeyFromUrl(url);
-        return key ? await getPresignedUrl(key, 3600) : url;
+        return key ? await getPresignedUrl(decodeURIComponent(key), 3600) : url;
       } catch (err) {
         console.warn(`[InventoryController] ⚠️ Failed to sign URL: ${url}`, err);
         return url;

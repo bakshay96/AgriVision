@@ -159,7 +159,7 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
       const key = extractKeyFromUrl(s3Url);
       if (key) {
         try {
-          signedUrl = await getPresignedUrl(key, 3600);
+          signedUrl = await getPresignedUrl(decodeURIComponent(key), 3600);
         } catch (signErr) {
           console.warn(`[AIController] ⚠️ Post-scan sign failed for ${key}:`, signErr);
         }
@@ -293,7 +293,7 @@ export const getAnalyses = async (req: AuthRequest, res: Response): Promise<void
       const key = extractKeyFromUrl(analysis.imageUrl);
       if (key) {
         try {
-          analysis.imageUrl = await getPresignedUrl(key, 3600); // 1 hour expiry
+          analysis.imageUrl = await getPresignedUrl(decodeURIComponent(key), 3600); // 1 hour expiry
         } catch (err) {
           console.warn(`[AIController] ⚠️ Failed to sign URL for ${key}:`, err);
         }
@@ -327,7 +327,7 @@ export const getAnalysisById = async (req: AuthRequest, res: Response): Promise<
     const key = extractKeyFromUrl(analysis.imageUrl);
     if (key) {
       try {
-        analysis.imageUrl = await getPresignedUrl(key, 3600);
+        analysis.imageUrl = await getPresignedUrl(decodeURIComponent(key), 3600);
       } catch (err) {
         console.warn(`[AIController] ⚠️ Failed to sign URL for ${key}:`, err);
       }

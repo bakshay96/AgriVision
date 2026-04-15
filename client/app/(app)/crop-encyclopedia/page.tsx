@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
+import { useSelectedCrops } from '@/hooks/useUser';
 import {
   BookOpen, Leaf, Bug, Sprout,
   Sun, Droplets, Thermometer, Calendar,
@@ -15,56 +15,67 @@ import { useDebounce } from '@/hooks/useDebounce';
 import PlantingGuide from '@/components/encyclopedia/PlantingGuide';
 import SeasonCalendar from '@/components/encyclopedia/SeasonCalendar';
 import PestManagement from '@/components/encyclopedia/PestManagement';
-import AICropSearch from '@/components/encyclopedia/AICropSearch';
+import AICropSearch, { getEnhancedCropData, CropInfo } from '@/components/encyclopedia/AICropSearch';
 import CropDetailView from '@/components/encyclopedia/CropDetailView';
 
 // Category configuration for crops
-const categoryIcons: Record<string, any> = {
-  'cereal': Sprout,
-  'vegetable': Leaf,
-  'fruit': Sun,
-  'pulse': Sprout,
-  'oilseed': Droplets,
-  'spice': Thermometer,
+const getCategoryIcon = (cat: string) => {
+  if (!cat) return Leaf;
+  const c = cat.toLowerCase();
+  if (c.includes('cereal')) return Sprout;
+  if (c.includes('vegetable')) return Leaf;
+  if (c.includes('fruit')) return Sun;
+  if (c.includes('pulse')) return Sprout;
+  if (c.includes('oilseed')) return Droplets;
+  if (c.includes('spice') || c.includes('cash')) return Thermometer;
+  return Leaf;
 };
 
-const categoryColors: Record<string, string> = {
-  'cereal': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  'vegetable': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  'fruit': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  'pulse': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  'oilseed': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  'spice': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+const getCategoryColor = (cat: string) => {
+  if (!cat) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+  const c = cat.toLowerCase();
+  if (c.includes('cereal')) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+  if (c.includes('vegetable')) return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+  if (c.includes('fruit')) return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+  if (c.includes('pulse')) return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+  if (c.includes('oilseed')) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+  if (c.includes('spice') || c.includes('cash')) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+  return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
 };
 
 export default function CropEncyclopediaPage() {
   const { t, language } = useLanguageStore();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedCrop, setSelectedCrop] = useState<any>(null);
-  const [aiCrop, setAiCrop] = useState<any>(null);
+  const [selectedCrop, setSelectedCrop] = useState<CropInfo | null>(null);
+  const [aiCrop, setAiCrop] = useState<CropInfo | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'planting' | 'season' | 'pests'>('overview');
   
   const debouncedSearch = useDebounce(search, 300);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['crop-encyclopedia', debouncedSearch, selectedCategory],
-    queryFn: () => cropEncyclopediaApi.getAll({
-      search: debouncedSearch || undefined,
-      category: selectedCategory || undefined,
-      limit: 24,
-    }).then(r => r.data.data),
-  });
+  const { data: cropsData, isLoading } = useSelectedCrops();
 
-  if (isLoading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-      </div>
-    );
-  }
+  const rawCrops = useMemo(() => {
+    const selected = cropsData?.selectedCrops || [];
+    const listToShow = selected.length > 0 ? selected : ['wheat', 'rice', 'cotton', 'soybean'];
+    
+    return listToShow.map((crop: any) => {
+      const cropName = typeof crop === 'string' ? crop : crop.name;
+      return getEnhancedCropData(cropName || 'wheat', language);
+    });
+  }, [cropsData, language]);
 
-  const { crops = [], categories = [] } = data || {};
+  const categories = useMemo(() => {
+    return Array.from(new Set(rawCrops.map((c: CropInfo) => c.category))) as string[];
+  }, [rawCrops]);
+
+  // Ensure category filtering works even if backend fails to filter
+  const crops = selectedCategory 
+    ? rawCrops.filter((c: CropInfo) => 
+        c.category === selectedCategory || 
+        (c.category && c.category.toLowerCase() === selectedCategory.toLowerCase())
+      )
+    : rawCrops;
 
   // If AI crop is found, show AI detail view
   if (aiCrop) {
@@ -78,7 +89,7 @@ export default function CropEncyclopediaPage() {
 
   // If a crop is selected, show detailed view
   if (selectedCrop) {
-    const CategoryIcon = categoryIcons[selectedCrop.category] || Leaf;
+    const CategoryIcon = getCategoryIcon(selectedCrop.category);
     
     return (
       <motion.div
@@ -99,19 +110,29 @@ export default function CropEncyclopediaPage() {
         <div className="flex flex-col md:flex-row gap-6">
           {/* Image */}
           <div className="w-full md:w-1/3">
-            <div className="relative h-64 rounded-2xl overflow-hidden">
+            <div className="relative h-64 rounded-2xl overflow-hidden bg-emerald-50 dark:bg-emerald-900/20">
               {selectedCrop.images?.[0] ? (
-                <img
-                  src={selectedCrop.images[0]}
-                  alt={selectedCrop.name}
-                  className="w-full h-full object-cover"
-                />
+                <>
+                  <img
+                    src={selectedCrop.images[0]}
+                    alt={selectedCrop.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.add('flex');
+                    }}
+                  />
+                  <div className="hidden absolute inset-0 w-full h-full items-center justify-center">
+                    <Leaf className="h-20 w-20 text-emerald-200 dark:text-emerald-800" />
+                  </div>
+                </>
               ) : (
-                <div className="w-full h-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                <div className="w-full h-full flex items-center justify-center">
                   <Leaf className="h-20 w-20 text-emerald-200 dark:text-emerald-800" />
                 </div>
               )}
-              <div className={`absolute top-4 left-4 rounded-full p-2 ${categoryColors[selectedCrop.category]}`}>
+              <div className={`absolute top-4 left-4 rounded-full p-2 ${getCategoryColor(selectedCrop.category)}`}>
                 <CategoryIcon className="h-5 w-5" />
               </div>
             </div>
@@ -224,11 +245,19 @@ export default function CropEncyclopediaPage() {
                 waterFrequency={selectedCrop.waterFrequency || 'Every 7-10 days depending on soil moisture'}
                 sunlight={selectedCrop.sunlight || 'Full sun (6-8 hours daily)'}
                 temperature={selectedCrop.temperatureRange || '20-30°C'}
-                fertilizers={selectedCrop.fertilizers || [
-                  { name: 'NPK 10-26-26', timing: 'At sowing', amount: '50 kg/ha' },
-                  { name: 'Urea', timing: '30 days after sowing', amount: '25 kg/ha' },
-                  { name: 'DAP', timing: 'At flowering', amount: '30 kg/ha' }
-                ]}
+                fertilizers={
+                  selectedCrop.fertilizers && 'organic' in selectedCrop.fertilizers
+                  ? [
+                      { name: 'NPK', timing: 'Basal Dose', amount: (selectedCrop.fertilizers as any).npk },
+                      ...(selectedCrop.fertilizers as any).organic.map((f: string) => ({ name: f, timing: 'Organic', amount: 'As needed' })),
+                      ...(selectedCrop.fertilizers as any).chemical.map((f: string) => ({ name: f, timing: 'Top dressing', amount: 'As needed' }))
+                    ]
+                  : selectedCrop.fertilizers || [
+                    { name: 'NPK 10-26-26', timing: 'At sowing', amount: '50 kg/ha' },
+                    { name: 'Urea', timing: '30 days after sowing', amount: '25 kg/ha' },
+                    { name: 'DAP', timing: 'At flowering', amount: '30 kg/ha' }
+                  ]
+                }
                 growthStages={selectedCrop.growthStages || [
                   { stage: 'Germination', duration: '7-10 days', description: 'Seeds sprout and first leaves appear' },
                   { stage: 'Vegetative', duration: '30-45 days', description: 'Plant develops leaves and stems' },
@@ -360,7 +389,7 @@ export default function CropEncyclopediaPage() {
       {/* Featured Crops Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {crops.map((crop: any) => {
-          const CategoryIcon = categoryIcons[crop.category] || Leaf;
+          const CategoryIcon = getCategoryIcon(crop.category);
           return (
             <motion.button
               key={crop._id}
@@ -369,20 +398,30 @@ export default function CropEncyclopediaPage() {
               whileTap={{ scale: 0.98 }}
               className="text-left group"
             >
-              <Card className="h-full overflow-hidden transition-all hover:shadow-lg dark:bg-slate-900 dark:border-slate-800">
-                <div className="relative h-40 overflow-hidden">
+              <Card className="h-full overflow-hidden transition-all hover:shadow-lg dark:bg-slate-900 dark:border-slate-800 flex flex-col">
+                <div className="relative h-40 overflow-hidden bg-emerald-50 dark:bg-emerald-900/20 shrink-0">
                   {crop.images?.[0] ? (
-                    <img
-                      src={crop.images[0]}
-                      alt={crop.name}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
+                    <>
+                      <img
+                        src={crop.images[0]}
+                        alt={crop.name}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.add('flex');
+                        }}
+                      />
+                      <div className="hidden absolute inset-0 w-full h-full items-center justify-center">
+                        <Leaf className="h-16 w-16 text-emerald-200 dark:text-emerald-800" />
+                      </div>
+                    </>
                   ) : (
-                    <div className="flex h-full items-center justify-center bg-emerald-50 dark:bg-emerald-900/20">
+                    <div className="flex h-full items-center justify-center">
                       <Leaf className="h-16 w-16 text-emerald-200 dark:text-emerald-800" />
                     </div>
                   )}
-                  <div className={`absolute left-3 top-3 rounded-full p-2 ${categoryColors[crop.category]}`}>
+                  <div className={`absolute left-3 top-3 rounded-full p-2 ${getCategoryColor(crop.category)}`}>
                     <CategoryIcon className="h-4 w-4" />
                   </div>
                 </div>

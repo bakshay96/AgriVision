@@ -197,7 +197,7 @@ export default function LoginPage() {
             and trade on the B2B marketplace.
           </p>
           <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-            {[
+            {/* {[
               { label: 'Farmers', value: '12K+' },
               { label: 'Scans Daily', value: '4.8K' },
               { label: 'Orders/Month', value: '$2.1M' },
@@ -206,7 +206,8 @@ export default function LoginPage() {
                 <p className="text-2xl font-bold">{stat.value}</p>
                 <p className="text-xs text-emerald-200">{stat.label}</p>
               </div>
-            ))}
+            ))} */}
+            
           </div>
         </motion.div>
       </div>

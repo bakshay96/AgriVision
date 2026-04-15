@@ -26,20 +26,48 @@ export const getCrops = async (req: AuthRequest, res: Response): Promise<void> =
     Crop.countDocuments(filter),
   ]);
 
-  // Fetch latest AI analysis for each crop
+  // Fetch latest AI analysis for each crop and re-sign images
   const cropsWithAI = await Promise.all(
-    crops.map(async (crop) => {
-      const latestAnalysis = await AIAnalysis.findOne({
+    crops.map(async (doc) => {
+      const crop = doc.toObject();
+      
+      // Re-sign crop images
+      if (crop.images && crop.images.length > 0) {
+        crop.images = await Promise.all(crop.images.map(async (url: string) => {
+          if (!url || !url.includes('amazonaws.com')) return url;
+          try {
+            const key = extractKeyFromUrl(url);
+            // decode URI component is critical because key extracted from URL is encoded
+            return key ? await import('../services/s3Service').then(m => m.getPresignedUrl(decodeURIComponent(key), 3600)) : url;
+          } catch (err) {
+            return url;
+          }
+        }));
+      }
+
+      let latestAnalysis = await AIAnalysis.findOne({
         cropId: crop._id,
         tenantId,
         isArchived: false
       })
       .sort({ createdAt: -1 })
-      .select('diagnosis severity confidenceScore createdAt -rawResponse');
+      .select('imageUrl diagnosis severity confidenceScore createdAt -rawResponse');
+
+      let analysisObject = latestAnalysis ? latestAnalysis.toObject() : null;
+      
+      // Re-sign AI analysis image
+      if (analysisObject && analysisObject.imageUrl && analysisObject.imageUrl.includes('amazonaws.com')) {
+        const key = extractKeyFromUrl(analysisObject.imageUrl);
+        if (key) {
+          try {
+             analysisObject.imageUrl = await import('../services/s3Service').then(m => m.getPresignedUrl(decodeURIComponent(key), 3600));
+          } catch(err) {}
+        }
+      }
 
       return {
-        ...crop.toObject(),
-        latestAIAnalysis: latestAnalysis || null
+        ...crop,
+        latestAIAnalysis: analysisObject
       };
     })
   );
@@ -68,7 +96,7 @@ export const getCropById = async (req: AuthRequest, res: Response): Promise<void
   if (!crop) throw createError('Crop not found', 404);
 
   // Fetch latest AI analyses for this crop
-  const aiAnalyses = await AIAnalysis.find({ 
+  const aiAnalysesDocs = await AIAnalysis.find({ 
     cropId: crop._id,
     tenantId: req.tenantId,
     isArchived: false 
@@ -77,18 +105,44 @@ export const getCropById = async (req: AuthRequest, res: Response): Promise<void
   .limit(10)
   .select('-rawResponse');
 
+  const aiAnalyses = await Promise.all(aiAnalysesDocs.map(async (doc) => {
+    const analysis = doc.toObject();
+    if (analysis.imageUrl && analysis.imageUrl.includes('amazonaws.com')) {
+      const key = extractKeyFromUrl(analysis.imageUrl);
+      if (key) {
+        try {
+          analysis.imageUrl = await import('../services/s3Service').then(m => m.getPresignedUrl(decodeURIComponent(key), 3600));
+        } catch(err) {}
+      }
+    }
+    return analysis;
+  }));
+
+  const cropObj = crop.toObject();
+  if (cropObj.images && cropObj.images.length > 0) {
+    cropObj.images = await Promise.all(cropObj.images.map(async (url: string) => {
+      if (!url || !url.includes('amazonaws.com')) return url;
+      try {
+        const key = extractKeyFromUrl(url);
+        return key ? await import('../services/s3Service').then(m => m.getPresignedUrl(decodeURIComponent(key), 3600)) : url;
+      } catch (err) {
+        return url;
+      }
+    }));
+  }
+
   console.log('[CropController] 📊 Fetched crop with AI analyses:', {
-    cropId: crop._id,
-    cropName: crop.name,
-    aiStatus: crop.aiStatus,
-    lastScannedAt: crop.lastScannedAt,
+    cropId: cropObj._id,
+    cropName: cropObj.name,
+    aiStatus: cropObj.aiStatus,
+    lastScannedAt: cropObj.lastScannedAt,
     totalAnalyses: aiAnalyses.length
   });
 
   res.status(200).json({ 
     success: true, 
     data: { 
-      crop,
+      crop: cropObj,
       aiAnalyses,
       latestAnalysis: aiAnalyses[0] || null
     } 
