@@ -17,6 +17,7 @@ export interface IAIAnalysis extends Document {
     diagnosis: {
         plantName: string;
         disease: string;
+        recommendedTreatment: string;
         confidence: number;
         severity: DiagnosisSeverity;
         affectedArea: string;
@@ -28,6 +29,8 @@ export interface IAIAnalysis extends Document {
         steps: ITreatmentStep[];
         organicRemedies: string[];
         chemicalTreatments: string[];
+        sprayInstructions: string;
+        requiredNutrients: string[];
         preventionTips: string[];
         estimatedRecoveryDays: number;
     };

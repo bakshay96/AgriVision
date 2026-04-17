@@ -15,6 +15,10 @@ export interface ScanResult {
     recommendedTreatment: string;
     organicRemedies: string[];
     chemicalTreatments: string[];
+    sprayInstructions: string;
+    requiredNutrients: string[];
+    preventionTips: string[];
+    estimatedRecoveryDays: number;
     affectedArea: string;
     description: string;
     aiModel: string;
@@ -53,7 +57,11 @@ export interface HarvestPredictionResult {
     yieldUnit: string;
     recommendations: string[];
 }
-export declare const analyzeImageBuffer: (buffer: Buffer, mimeType: string, language?: string) => Promise<ScanResult>;
+export declare const analyzeImageBuffer: (buffer: Buffer, mimeType: string, language?: string, context?: {
+    cropName?: string;
+    cropAge?: string;
+    description?: string;
+}) => Promise<ScanResult>;
 export declare const analyzeImageWithGemini: (imagePath: string, mimeType?: string) => Promise<CropDiagnosisResult>;
 export declare const predictHarvestDate: (params: {
     cropName: string;

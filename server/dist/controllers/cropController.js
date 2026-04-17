@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -28,18 +61,45 @@ const getCrops = async (req, res) => {
             .limit(Number(limit)),
         Crop_1.default.countDocuments(filter),
     ]);
-    // Fetch latest AI analysis for each crop
-    const cropsWithAI = await Promise.all(crops.map(async (crop) => {
-        const latestAnalysis = await AIAnalysis_1.default.findOne({
+    // Fetch latest AI analysis for each crop and re-sign images
+    const cropsWithAI = await Promise.all(crops.map(async (doc) => {
+        const crop = doc.toObject();
+        // Re-sign crop images
+        if (crop.images && crop.images.length > 0) {
+            crop.images = await Promise.all(crop.images.map(async (url) => {
+                if (!url || !url.includes('amazonaws.com'))
+                    return url;
+                try {
+                    const key = (0, s3Service_1.extractKeyFromUrl)(url);
+                    // decode URI component is critical because key extracted from URL is encoded
+                    return key ? await Promise.resolve().then(() => __importStar(require('../services/s3Service'))).then(m => m.getPresignedUrl(decodeURIComponent(key), 3600)) : url;
+                }
+                catch (err) {
+                    return url;
+                }
+            }));
+        }
+        let latestAnalysis = await AIAnalysis_1.default.findOne({
             cropId: crop._id,
             tenantId,
             isArchived: false
         })
             .sort({ createdAt: -1 })
-            .select('diagnosis severity confidenceScore createdAt -rawResponse');
+            .select('imageUrl diagnosis severity confidenceScore createdAt -rawResponse');
+        let analysisObject = latestAnalysis ? latestAnalysis.toObject() : null;
+        // Re-sign AI analysis image
+        if (analysisObject && analysisObject.imageUrl && analysisObject.imageUrl.includes('amazonaws.com')) {
+            const key = (0, s3Service_1.extractKeyFromUrl)(analysisObject.imageUrl);
+            if (key) {
+                try {
+                    analysisObject.imageUrl = await Promise.resolve().then(() => __importStar(require('../services/s3Service'))).then(m => m.getPresignedUrl(decodeURIComponent(key), 3600));
+                }
+                catch (err) { }
+            }
+        }
         return {
-            ...crop.toObject(),
-            latestAIAnalysis: latestAnalysis || null
+            ...crop,
+            latestAIAnalysis: analysisObject
         };
     }));
     console.log('[CropController] 📋 Fetched crops list with AI data:', {
@@ -64,7 +124,7 @@ const getCropById = async (req, res) => {
     if (!crop)
         throw (0, errorHandler_1.createError)('Crop not found', 404);
     // Fetch latest AI analyses for this crop
-    const aiAnalyses = await AIAnalysis_1.default.find({
+    const aiAnalysesDocs = await AIAnalysis_1.default.find({
         cropId: crop._id,
         tenantId: req.tenantId,
         isArchived: false
@@ -72,17 +132,44 @@ const getCropById = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(10)
         .select('-rawResponse');
+    const aiAnalyses = await Promise.all(aiAnalysesDocs.map(async (doc) => {
+        const analysis = doc.toObject();
+        if (analysis.imageUrl && analysis.imageUrl.includes('amazonaws.com')) {
+            const key = (0, s3Service_1.extractKeyFromUrl)(analysis.imageUrl);
+            if (key) {
+                try {
+                    analysis.imageUrl = await Promise.resolve().then(() => __importStar(require('../services/s3Service'))).then(m => m.getPresignedUrl(decodeURIComponent(key), 3600));
+                }
+                catch (err) { }
+            }
+        }
+        return analysis;
+    }));
+    const cropObj = crop.toObject();
+    if (cropObj.images && cropObj.images.length > 0) {
+        cropObj.images = await Promise.all(cropObj.images.map(async (url) => {
+            if (!url || !url.includes('amazonaws.com'))
+                return url;
+            try {
+                const key = (0, s3Service_1.extractKeyFromUrl)(url);
+                return key ? await Promise.resolve().then(() => __importStar(require('../services/s3Service'))).then(m => m.getPresignedUrl(decodeURIComponent(key), 3600)) : url;
+            }
+            catch (err) {
+                return url;
+            }
+        }));
+    }
     console.log('[CropController] 📊 Fetched crop with AI analyses:', {
-        cropId: crop._id,
-        cropName: crop.name,
-        aiStatus: crop.aiStatus,
-        lastScannedAt: crop.lastScannedAt,
+        cropId: cropObj._id,
+        cropName: cropObj.name,
+        aiStatus: cropObj.aiStatus,
+        lastScannedAt: cropObj.lastScannedAt,
         totalAnalyses: aiAnalyses.length
     });
     res.status(200).json({
         success: true,
         data: {
-            crop,
+            crop: cropObj,
             aiAnalyses,
             latestAnalysis: aiAnalyses[0] || null
         }

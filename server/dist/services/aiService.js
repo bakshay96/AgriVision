@@ -25,9 +25,15 @@ const MODEL_CANDIDATES = process.env.GEMINI_MODEL
     : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-pro-vision'];
 // Deduplicate while preserving order
 const UNIQUE_MODEL_CANDIDATES = [...new Set(MODEL_CANDIDATES)];
-const SCAN_PROMPT = (lang) => `You are an expert agricultural pathologist and botanist. Analyze this crop/plant image carefully.
+const SCAN_PROMPT = (lang, context) => `You are an expert agricultural pathologist and botanist. Analyze this crop/plant image carefully.
 
-CRITICAL INSTRUCTION: You MUST respond ONLY with valid JSON. Do not include markdown blocks, no backticks, and absolutely no conversational text. Start directly with { and end with }.
+USER PROVIDED CONTEXT:
+${context?.cropName ? `- Identified Crop: ${context.cropName}` : ''}
+${context?.cropAge ? `- Crop Age/Stage: ${context.cropAge}` : ''}
+${context?.description ? `- Farmer's Observations: ${context.description}` : ''}
+Take this context into extreme consideration when making your diagnosis. It represents the ground truth provided by the farmer. Use this to predict a deeply accurate diagnosis and provide very genuine, targeted information tailored to this particular crop's stage.
+
+CRITICAL INSTRUCTION: You MUST respond ONLY with valid JSON. Do not include markdown blocks, no backticks, and absolutely no conversational text. Start directly with { and end with }. NEVER include unescaped newlines inside string values.
 
 IMPORTANT: Your JSON values (the content, not the keys) MUST be translated into the following language: ${lang}.
 CRITICAL: ALL JSON KEYS (like "plantName", "condition", etc.) MUST REMAIN IN ENGLISH. DO NOT TRANSLATE THE KEYS!
@@ -43,8 +49,12 @@ Respond ONLY with valid JSON matching this exact structure:
   "recommendedTreatment": "Single concise treatment recommendation",
   "organicRemedies": ["Jaivik upay 1", "Jaivik upay 2"],
   "chemicalTreatments": ["Suggested fertilizer 1", "Suggested spray 2"],
+  "sprayInstructions": "Specific instructions on HOW and WHAT QUANTITY to spray per acre or land area based on standard agricultural practices",
+  "requiredNutrients": ["Specific Nutrient 1 required to improve plant health", "Nutrient 2"],
+  "preventionTips": ["Specific prevention tip 1 for this crop", "Prevention tip 2"],
+  "estimatedRecoveryDays": 14,
   "affectedArea": "Percentage or description of affected area",
-  "description": "2–3 sentence clinical description of what you observe"
+  "description": "2-3 sentence extremely accurate clinical description using the provided context and visual cues"
 }
 
 Rules:
@@ -55,6 +65,11 @@ Rules:
 - recommendedTreatment MUST be a single, actionable sentence
 - organicRemedies MUST be an array of organic or traditional methods (Jaivik Upay)
 - chemicalTreatments MUST evaluate potential fertilizers, pesticides, or sprays if applicable
+- sprayInstructions MUST contain specific dosage (e.g. ml/liter or kg/acre) and application method
+- requiredNutrients MUST be an array of micro or macro nutrients the plant is currently lacking
+- preventionTips MUST be an array of 2-4 specific, actionable tips to prevent future disease for this crop
+- estimatedRecoveryDays MUST be a realistic integer number of days for recovery; 0 if plant is healthy
+- Use the user's provided description and crop age to make the recommendation as genuine and specific as possible
 - If the crop appears healthy, set condition to "Healthy" and severity to "healthy"
 - If you cannot identify the plant, set plantName to "Unknown Plant"`;
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +79,7 @@ Rules:
 // ─────────────────────────────────────────────────────────────────────────────
 // tryModelOnce — attempt a single Gemini model, returns null if model not found
 // ─────────────────────────────────────────────────────────────────────────────
-async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, language) {
+async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, language, context) {
     try {
         console.log(`[AIService] Trying model: ${modelName}`);
         const model = genAI.getGenerativeModel({
@@ -75,7 +90,7 @@ async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, 
                 { category: generative_ai_1.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: generative_ai_1.HarmBlockThreshold.BLOCK_NONE },
                 { category: generative_ai_1.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: generative_ai_1.HarmBlockThreshold.BLOCK_NONE },
             ],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
         });
         const imagePart = {
             inlineData: {
@@ -83,7 +98,7 @@ async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, 
                 mimeType: mimeType,
             },
         };
-        const result = await model.generateContent([SCAN_PROMPT(language), imagePart]);
+        const result = await model.generateContent([SCAN_PROMPT(language, context), imagePart]);
         const rawText = result.response.text();
         console.log(`[AIService] ✅ Model ${modelName} succeeded. Response length:`, rawText.length);
         console.log(`[AIService] Response preview:`, rawText.substring(0, 200));
@@ -93,38 +108,49 @@ async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, 
             .replace(/\s*```\s*$/i, '')
             .trim();
         // Robust extraction: find the first { and last }
-        const start = cleanJson.indexOf('{');
-        const end = cleanJson.lastIndexOf('}');
-        if (start !== -1 && end !== -1 && end > start) {
-            cleanJson = cleanJson.substring(start, end + 1);
+        const startIdx = cleanJson.indexOf('{');
+        const endIdx = cleanJson.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+            cleanJson = cleanJson.substring(startIdx, endIdx + 1);
+        }
+        // ── Sanitize bare newlines / carriage returns inside JSON string values ──
+        // Strategy: regex matches each complete "quoted string" including any
+        // embedded newlines (the `s` dotAll flag makes . match \n too), then
+        // replaces the bare control characters inside only that matched region.
+        // This is O(n) with no string concatenation in user code → safe for large
+        // payloads and any language (Marathi, Hindi, English, etc.)
+        function sanitizeJson(raw) {
+            return raw.replace(/"((?:[^"\\]|\\[\s\S])*)"/g, (_match, inner) => {
+                const cleaned = inner
+                    .replace(/\n/g, ' ')
+                    .replace(/\r/g, ' ')
+                    .replace(/\t/g, ' ');
+                return `"${cleaned}"`;
+            });
         }
         // Try to parse JSON
         let parsed;
         try {
-            parsed = JSON.parse(cleanJson);
+            parsed = JSON.parse(sanitizeJson(cleanJson));
         }
         catch (parseError) {
             console.error('[AIService] JSON parse failed, attempting recovery...');
-            // Try to fix common JSON issues
-            let fixedJson = cleanJson
+            // Fallback: sanitize + structural repairs
+            let fixedJson = sanitizeJson(cleanJson)
                 // Remove trailing commas
-                .replace(/,\s*([}\]])/g, '$1')
-                // Fix unclosed strings (add closing quote if missing)
-                .replace(/(:\s*"[^"]*)([,}\]])/g, (match, p1, p2) => {
-                if (p1.endsWith('"'))
-                    return match;
-                return p1 + '"' + p2;
-            });
-            // If JSON is truncated, try to close it
-            const openBraces = (fixedJson.match(/\{/g) || []).length;
-            const closeBraces = (fixedJson.match(/\}/g) || []).length;
-            const openBrackets = (fixedJson.match(/\[/g) || []).length;
-            const closeBrackets = (fixedJson.match(/\]/g) || []).length;
-            // Add missing closing brackets/braces
-            while (closeBrackets < openBrackets) {
+                .replace(/,\s*([}\]])/g, '$1');
+            // Close any truncated open string at end of doc
+            const quoteCount = (fixedJson.match(/(?<!\\)"/g) || []).length;
+            if (quoteCount % 2 !== 0)
+                fixedJson += '"';
+            // Count and close unclosed brackets/braces — cap iterations to avoid runaway loop
+            const maxClose = 20;
+            let iters = 0;
+            while ((fixedJson.match(/\[/g) || []).length > (fixedJson.match(/\]/g) || []).length && iters++ < maxClose) {
                 fixedJson += ']';
             }
-            while (closeBraces < openBraces) {
+            iters = 0;
+            while ((fixedJson.match(/\{/g) || []).length > (fixedJson.match(/\}/g) || []).length && iters++ < maxClose) {
                 fixedJson += '}';
             }
             try {
@@ -145,6 +171,10 @@ async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, 
             recommendedTreatment: String(parsed.recommendedTreatment || ''),
             organicRemedies: Array.isArray(parsed.organicRemedies) ? parsed.organicRemedies.map(String) : [],
             chemicalTreatments: Array.isArray(parsed.chemicalTreatments) ? parsed.chemicalTreatments.map(String) : [],
+            sprayInstructions: String(parsed.sprayInstructions || ''),
+            requiredNutrients: Array.isArray(parsed.requiredNutrients) ? parsed.requiredNutrients.map(String) : [],
+            preventionTips: Array.isArray(parsed.preventionTips) ? parsed.preventionTips.map(String) : [],
+            estimatedRecoveryDays: typeof parsed.estimatedRecoveryDays === 'number' ? parsed.estimatedRecoveryDays : 14,
             affectedArea: String(parsed.affectedArea || 'N/A'),
             description: String(parsed.description || ''),
             aiModel: modelName,
@@ -161,8 +191,13 @@ async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, 
             return null;
         }
         // Auth / key errors — no point trying other models
-        if (errMsg.includes('API_KEY_INVALID') || (errMsg.includes('invalid') && errMsg.includes('key')) || errMsg.includes('403')) {
+        if (errMsg.includes('API_KEY_INVALID') || (errMsg.includes('invalid') && errMsg.includes('key'))) {
             throw new AIServiceError('INVALID_KEY', 'Gemini API key is invalid or lacks permission', err);
+        }
+        // 403 Forbidden could mean the specific model isn't enabled for this key (common with new/preview models)
+        if (errMsg.includes('403')) {
+            console.warn(`[AIService] ⚠️  Model ${modelName} returned 403 (Forbidden) — trying next. Details: ${errMsg}`);
+            return null;
         }
         // Rate limit — no point trying other models right now
         if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota')) {
@@ -181,7 +216,7 @@ async function tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, 
 // analyzeImageBuffer — PRIMARY public method (memory-storage, no disk I/O)
 // Tries each model candidate in order; throws error if AI is unavailable
 // ─────────────────────────────────────────────────────────────────────────────
-const analyzeImageBuffer = async (buffer, mimeType, language = 'English') => {
+const analyzeImageBuffer = async (buffer, mimeType, language = 'English', context) => {
     const startTime = Date.now();
     const apiKey = process.env.GEMINI_API_KEY;
     // ── Security: validate MIME type ──────────────────────────────────────────
@@ -199,7 +234,7 @@ const analyzeImageBuffer = async (buffer, mimeType, language = 'English') => {
     console.log('[AIService] Image:', `${Math.round(buffer.length / 1024)}KB`, mimeType);
     // ── Try each model in sequence ────────────────────────────────────────────
     for (const modelName of UNIQUE_MODEL_CANDIDATES) {
-        const result = await tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, language);
+        const result = await tryModelOnce(genAI, modelName, base64Image, mimeType, startTime, language, context);
         if (result !== null)
             return result;
     }

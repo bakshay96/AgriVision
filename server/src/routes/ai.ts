@@ -70,8 +70,8 @@ const diskUpload = multer({
 const router = Router();
 router.use(protect, tenantIsolation);
 
-// Primary: disk-based scan (saves image as requested by user)
-router.post('/scan', diskUpload.single('image'), scanCrop);
+// Primary: memory-based scan (file.buffer available, no disk writes)
+router.post('/scan', memoryUpload.single('image'), scanCrop);
 
 // Legacy: disk-based analyze (kept for existing integrations)
 router.post('/analyze', diskUpload.single('image'), analyzeImage);

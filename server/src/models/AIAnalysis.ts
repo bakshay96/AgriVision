@@ -21,6 +21,7 @@ export interface IAIAnalysis extends Document {
   diagnosis: {
     plantName: string;
     disease: string;
+    recommendedTreatment: string;
     confidence: number; // 0-100
     severity: DiagnosisSeverity;
     affectedArea: string; // e.g., "30% of visible leaves"
@@ -32,6 +33,8 @@ export interface IAIAnalysis extends Document {
     steps: ITreatmentStep[];
     organicRemedies: string[];
     chemicalTreatments: string[];
+    sprayInstructions: string;
+    requiredNutrients: string[];
     preventionTips: string[];
     estimatedRecoveryDays: number;
   };
@@ -73,6 +76,7 @@ const AIAnalysisSchema = new Schema<IAIAnalysis>(
     diagnosis: {
       plantName: { type: String, default: 'Unknown Plant' },
       disease: { type: String, required: true },
+      recommendedTreatment: { type: String, default: '' },
       confidence: { type: Number, min: 0, max: 100, required: true },
       severity: {
         type: String,
@@ -92,6 +96,8 @@ const AIAnalysisSchema = new Schema<IAIAnalysis>(
       steps: [TreatmentStepSchema],
       organicRemedies: [{ type: String }],
       chemicalTreatments: [{ type: String }],
+      sprayInstructions: { type: String, default: '' },
+      requiredNutrients: [{ type: String }],
       preventionTips: [{ type: String }],
       estimatedRecoveryDays: { type: Number, default: 0 },
     },
