@@ -68,17 +68,23 @@ const scanCrop = async (req, res) => {
         throw (0, errorHandler_1.createError)('No image file uploaded. Include an "image" field.', 400);
     // Extra server-side size guard (multer already limits but belt-and-suspenders)
     if (file.size > 5 * 1024 * 1024) {
-        if (file.path && fs_1.default.existsSync(file.path))
-            fs_1.default.unlinkSync(file.path);
         throw (0, errorHandler_1.createError)('Image exceeds 5 MB limit', 413);
     }
     const userId = req.user._id.toString();
     const tenantId = req.tenantId;
-    const { cropId, language = 'English' } = req.body;
+    const { cropId, language = 'English', cropName, cropAge, description } = req.body;
     try {
-        const buffer = fs_1.default.readFileSync(file.path);
+        // With memoryUpload, the image is in file.buffer (no disk path)
+        const buffer = file.buffer;
+        if (!buffer || buffer.length === 0) {
+            throw (0, errorHandler_1.createError)('Image buffer is empty. Please try uploading again.', 400);
+        }
         // ── Call AI service FIRST with the in-memory buffer ─────────────────────
-        const result = await (0, aiService_1.analyzeImageBuffer)(buffer, file.mimetype, language);
+        const result = await (0, aiService_1.analyzeImageBuffer)(buffer, file.mimetype, language, {
+            cropName,
+            cropAge,
+            description
+        });
         // ── Only upload to S3 if AI analysis was successful ─────────────────────
         let s3Url = '';
         let uploadSuccess = false;
@@ -89,12 +95,16 @@ const scanCrop = async (req, res) => {
                 size: file.size,
                 folder: 'crop-scans'
             });
+            // S3 metadata headers only accept ASCII printable characters (RFC 7230).
+            // AI responses in Marathi/Hindi contain non-ASCII chars that would cause
+            // ERR_INVALID_CHAR. Strip them, falling back to 'Unknown' if nothing remains.
+            const toAsciiMeta = (value) => value.replace(/[^\x20-\x7E]/g, '').trim() || 'Unknown';
             const uploadResult = await (0, s3Service_1.uploadBuffer)(buffer, file.originalname, file.mimetype, 'crop-scans', {
                 'uploaded-by': req.user._id.toString(),
                 'tenant-id': tenantId,
                 'type': 'ai-analysis',
-                'plant-name': result.plantName,
-                'condition': result.condition,
+                'plant-name': toAsciiMeta(result.plantName),
+                'condition': toAsciiMeta(result.condition),
             });
             s3Url = uploadResult.url;
             uploadSuccess = true;
@@ -124,6 +134,7 @@ const scanCrop = async (req, res) => {
             diagnosis: {
                 plantName: result.plantName,
                 disease: result.condition,
+                recommendedTreatment: result.recommendedTreatment,
                 confidence: result.confidenceScore,
                 severity: result.severity,
                 affectedArea: result.affectedArea,
@@ -141,8 +152,10 @@ const scanCrop = async (req, res) => {
                 ],
                 organicRemedies: result.organicRemedies,
                 chemicalTreatments: result.chemicalTreatments,
-                preventionTips: ['Monitor weekly', 'Maintain good drainage', 'Rotate crops annually'],
-                estimatedRecoveryDays: result.severity === 'healthy' ? 0 : 14,
+                sprayInstructions: result.sprayInstructions,
+                requiredNutrients: result.requiredNutrients,
+                preventionTips: result.preventionTips,
+                estimatedRecoveryDays: result.estimatedRecoveryDays,
             },
             aiModel: result.aiModel,
             processingTimeMs: result.processingTimeMs,
@@ -169,7 +182,7 @@ const scanCrop = async (req, res) => {
             const key = (0, s3Service_1.extractKeyFromUrl)(s3Url);
             if (key) {
                 try {
-                    signedUrl = await (0, s3Service_1.getPresignedUrl)(key, 3600);
+                    signedUrl = await (0, s3Service_1.getPresignedUrl)(decodeURIComponent(key), 3600);
                 }
                 catch (signErr) {
                     console.warn(`[AIController] ⚠️ Post-scan sign failed for ${key}:`, signErr);
@@ -190,6 +203,10 @@ const scanCrop = async (req, res) => {
                     recommendedTreatment: result.recommendedTreatment,
                     organicRemedies: result.organicRemedies,
                     chemicalTreatments: result.chemicalTreatments,
+                    sprayInstructions: result.sprayInstructions,
+                    requiredNutrients: result.requiredNutrients,
+                    preventionTips: result.preventionTips,
+                    estimatedRecoveryDays: result.estimatedRecoveryDays,
                     affectedArea: result.affectedArea,
                     description: result.description,
                     aiModel: result.aiModel,
@@ -202,8 +219,7 @@ const scanCrop = async (req, res) => {
         });
     }
     catch (err) {
-        if (file?.path && fs_1.default.existsSync(file.path))
-            fs_1.default.unlinkSync(file.path);
+        // No disk file to clean up — memory storage handles GC automatically
         // Re-map AIServiceError to user-friendly HTTP error
         if (err instanceof aiService_1.AIServiceError) {
             const status = aiErrorToHttp(err.code);
@@ -299,7 +315,7 @@ const getAnalyses = async (req, res) => {
             const key = (0, s3Service_1.extractKeyFromUrl)(analysis.imageUrl);
             if (key) {
                 try {
-                    analysis.imageUrl = await (0, s3Service_1.getPresignedUrl)(key, 3600); // 1 hour expiry
+                    analysis.imageUrl = await (0, s3Service_1.getPresignedUrl)(decodeURIComponent(key), 3600); // 1 hour expiry
                 }
                 catch (err) {
                     console.warn(`[AIController] ⚠️ Failed to sign URL for ${key}:`, err);
@@ -331,7 +347,7 @@ const getAnalysisById = async (req, res) => {
         const key = (0, s3Service_1.extractKeyFromUrl)(analysis.imageUrl);
         if (key) {
             try {
-                analysis.imageUrl = await (0, s3Service_1.getPresignedUrl)(key, 3600);
+                analysis.imageUrl = await (0, s3Service_1.getPresignedUrl)(decodeURIComponent(key), 3600);
             }
             catch (err) {
                 console.warn(`[AIController] ⚠️ Failed to sign URL for ${key}:`, err);

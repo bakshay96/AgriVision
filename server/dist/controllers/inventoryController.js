@@ -69,7 +69,7 @@ const getInventory = async (req, res) => {
                     return url;
                 try {
                     const key = (0, s3Service_1.extractKeyFromUrl)(url);
-                    return key ? await (0, s3Service_1.getPresignedUrl)(key, 3600) : url;
+                    return key ? await (0, s3Service_1.getPresignedUrl)(decodeURIComponent(key), 3600) : url;
                 }
                 catch (err) {
                     console.warn(`[InventoryController] ⚠️ Failed to sign URL: ${url}`, err);
@@ -103,7 +103,7 @@ const getMyInventory = async (req, res) => {
                     return url;
                 try {
                     const key = (0, s3Service_1.extractKeyFromUrl)(url);
-                    return key ? await (0, s3Service_1.getPresignedUrl)(key, 3600) : url;
+                    return key ? await (0, s3Service_1.getPresignedUrl)(decodeURIComponent(key), 3600) : url;
                 }
                 catch (err) {
                     console.warn(`[InventoryController] ⚠️ Failed to sign URL: ${url}`, err);
@@ -210,7 +210,7 @@ const getInventoryWithOrders = async (req, res) => {
                 return url;
             try {
                 const key = (0, s3Service_1.extractKeyFromUrl)(url);
-                return key ? await (0, s3Service_1.getPresignedUrl)(key, 3600) : url;
+                return key ? await (0, s3Service_1.getPresignedUrl)(decodeURIComponent(key), 3600) : url;
             }
             catch (err) {
                 console.warn(`[InventoryController] ⚠️ Failed to sign URL: ${url}`, err);

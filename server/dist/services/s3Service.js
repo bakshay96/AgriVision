@@ -27,6 +27,7 @@ const ALLOWED_IMAGE_TYPES = [
     'image/png',
     'image/webp',
     'image/gif',
+    'image/avif',
 ];
 const ALLOWED_MEDIA_TYPES = [
     ...ALLOWED_IMAGE_TYPES,
@@ -72,6 +73,7 @@ const validateFile = (buffer, mimeType, originalName) => {
         'image/png': ['.png'],
         'image/webp': ['.webp'],
         'image/gif': ['.gif'],
+        'image/avif': ['.avif'],
         'video/mp4': ['.mp4'],
         'video/webm': ['.webm'],
         'application/pdf': ['.pdf'],

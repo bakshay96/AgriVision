@@ -40,6 +40,7 @@ interface IAIAnalysis {
   diagnosis: {
     plantName: string;
     disease: string;
+    recommendedTreatment?: string;
     severity: string;
     confidence: number;
     description: string;
@@ -50,6 +51,10 @@ interface IAIAnalysis {
     steps: Array<{ step: number; action: string; product?: string }>;
     organicRemedies: string[];
     chemicalTreatments: string[];
+    sprayInstructions?: string;
+    requiredNutrients?: string[];
+    preventionTips?: string[];
+    estimatedRecoveryDays?: number;
   };
 }
 
@@ -201,18 +206,17 @@ function AnalysisHistoryCard({
                 </div>
               )}
 
-              {/* Treatments & Fertilizers */}
+              {/* Treatments — full section */}
               {treatPlan && (
                 <div className="space-y-2">
                   {/* Organic Remedies */}
-                  {Array.isArray(treatPlan.organicRemedies) && treatPlan.organicRemedies.length > 0 && (
+                  {Array.isArray(treatPlan.organicRemedies) && (treatPlan.organicRemedies as string[]).length > 0 && (
                     <div className="rounded-lg bg-emerald-50 p-3">
                       <p className="mb-1.5 text-xs font-semibold text-emerald-700">Jaivik Upay (Organic Remedies)</p>
                       <ul className="space-y-1">
                         {(treatPlan.organicRemedies as string[]).map((r, i) => (
                           <li key={i} className="flex gap-2 text-xs text-slate-600">
-                            <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-                            {r}
+                            <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" />{r}
                           </li>
                         ))}
                       </ul>
@@ -220,28 +224,68 @@ function AnalysisHistoryCard({
                   )}
 
                   {/* Chemical Treatments */}
-                  {Array.isArray(treatPlan.chemicalTreatments) && treatPlan.chemicalTreatments.length > 0 && (
+                  {Array.isArray(treatPlan.chemicalTreatments) && (treatPlan.chemicalTreatments as string[]).length > 0 && (
                     <div className="rounded-lg bg-blue-50 p-3">
-                      <p className="mb-1.5 text-xs font-semibold text-blue-700">Fertilizers & Sprays</p>
+                      <p className="mb-1.5 text-xs font-semibold text-blue-700">Fertilizers &amp; Sprays</p>
                       <ul className="space-y-1">
                         {(treatPlan.chemicalTreatments as string[]).map((r, i) => (
                           <li key={i} className="flex gap-2 text-xs text-slate-600">
-                            <span className="mt-1 w-1 h-1 rounded-full bg-blue-500 shrink-0" />
-                            {r}
+                            <span className="mt-1 w-1 h-1 rounded-full bg-blue-500 shrink-0" />{r}
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {/* General Treatment Steps */}
-                  {Array.isArray(treatPlan.steps) && (
+                  {/* Required Nutrients */}
+                  {Array.isArray(treatPlan.requiredNutrients) && (treatPlan.requiredNutrients as string[]).length > 0 && (
+                    <div className="rounded-lg bg-purple-50 p-3">
+                      <p className="mb-2 text-xs font-semibold text-purple-700">Required Nutrients</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(treatPlan.requiredNutrients as string[]).map((n, i) => (
+                          <span key={i} className="rounded-md bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800 border border-purple-200">{n}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Spray Instructions */}
+                  {treatPlan.sprayInstructions && (
+                    <div className="rounded-lg bg-sky-50 p-3 border border-sky-100">
+                      <p className="mb-1.5 text-xs font-semibold text-sky-700">Dosage &amp; Spray Instructions (Per Acre)</p>
+                      <p className="text-xs leading-relaxed text-slate-600">{String(treatPlan.sprayInstructions)}</p>
+                    </div>
+                  )}
+
+                  {/* Prevention Tips */}
+                  {Array.isArray(treatPlan.preventionTips) && (treatPlan.preventionTips as string[]).length > 0 && (
+                    <div className="rounded-lg bg-teal-50 p-3">
+                      <p className="mb-1.5 text-xs font-semibold text-teal-700">Prevention Tips</p>
+                      <ul className="space-y-1">
+                        {(treatPlan.preventionTips as string[]).map((t, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600">
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400" />{t}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recommended Treatment Steps */}
+                  {Array.isArray(treatPlan.steps) && treatPlan.steps.length > 0 && (
                     <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
-                      <p className="mb-1.5 text-xs font-semibold text-slate-700">
-                        General Treatment Steps
-                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                          {String(treatPlan.urgency || '').replace('_', ' ')}
-                        </span>
+                      <p className="mb-1.5 text-xs font-semibold text-slate-700 flex flex-wrap items-center gap-1.5">
+                        Recommended Treatment
+                        {treatPlan.urgency && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            {String(treatPlan.urgency).replace('_', ' ')}
+                          </span>
+                        )}
+                        {treatPlan.estimatedRecoveryDays != null && Number(treatPlan.estimatedRecoveryDays) > 0 && (
+                          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                            ~{Number(treatPlan.estimatedRecoveryDays)}d recovery
+                          </span>
+                        )}
                       </p>
                       <ol className="space-y-1.5">
                         {treatPlan.steps.map((step) => (
@@ -251,9 +295,9 @@ function AnalysisHistoryCard({
                             </span>
                             <span>
                               <span className="font-medium">{String(step.action)}</span>
-                              {step.product != null && String(step.product) !== 'None' ? (
+                              {step.product != null && String(step.product) !== 'None' && (
                                 <span className="text-slate-400"> · {String(step.product)}</span>
-                              ) : null}
+                              )}
                             </span>
                           </li>
                         ))}

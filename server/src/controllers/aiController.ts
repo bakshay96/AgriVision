@@ -39,19 +39,26 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
 
   // Extra server-side size guard (multer already limits but belt-and-suspenders)
   if (file.size > 5 * 1024 * 1024) {
-    if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
     throw createError('Image exceeds 5 MB limit', 413);
   }
 
   const userId = req.user!._id.toString();
   const tenantId = req.tenantId!;
-  const { cropId, language = 'English' } = req.body;
+  const { cropId, language = 'English', cropName, cropAge, description } = req.body;
 
   try {
-    const buffer = fs.readFileSync(file.path);
+    // With memoryUpload, the image is in file.buffer (no disk path)
+    const buffer = file.buffer;
+    if (!buffer || buffer.length === 0) {
+      throw createError('Image buffer is empty. Please try uploading again.', 400);
+    }
     
     // ── Call AI service FIRST with the in-memory buffer ─────────────────────
-    const result = await analyzeImageBuffer(buffer, file.mimetype, language);
+    const result = await analyzeImageBuffer(buffer, file.mimetype, language, {
+      cropName,
+      cropAge,
+      description
+    });
     
     // ── Only upload to S3 if AI analysis was successful ─────────────────────
     let s3Url = '';
@@ -64,6 +71,12 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
         folder: 'crop-scans'
       });
 
+      // S3 metadata headers only accept ASCII printable characters (RFC 7230).
+      // AI responses in Marathi/Hindi contain non-ASCII chars that would cause
+      // ERR_INVALID_CHAR. Strip them, falling back to 'Unknown' if nothing remains.
+      const toAsciiMeta = (value: string): string =>
+        value.replace(/[^\x20-\x7E]/g, '').trim() || 'Unknown';
+
       const uploadResult = await uploadBuffer(
         buffer,
         file.originalname,
@@ -71,10 +84,10 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
         'crop-scans',
         {
           'uploaded-by': req.user!._id.toString(),
-          'tenant-id': tenantId,
-          'type': 'ai-analysis',
-          'plant-name': result.plantName,
-          'condition': result.condition,
+          'tenant-id':   tenantId,
+          'type':        'ai-analysis',
+          'plant-name':  toAsciiMeta(result.plantName),
+          'condition':   toAsciiMeta(result.condition),
         }
       );
       
@@ -106,13 +119,14 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
       imageName:    file.originalname,
       analysisType: 'disease_detection',
       diagnosis: {
-        plantName:   result.plantName,
-        disease:     result.condition,
-        confidence:  result.confidenceScore,
-        severity:    result.severity,
-        affectedArea:result.affectedArea,
-        description: result.description,
-        symptoms:    result.symptoms,
+        plantName:            result.plantName,
+        disease:              result.condition,
+        recommendedTreatment: result.recommendedTreatment,
+        confidence:           result.confidenceScore,
+        severity:             result.severity,
+        affectedArea:         result.affectedArea,
+        description:          result.description,
+        symptoms:             result.symptoms,
       },
       treatmentPlan: {
         urgency: result.severity === 'critical' || result.severity === 'severe'
@@ -123,10 +137,12 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
         steps: [
           { step: 1, action: result.recommendedTreatment, timing: 'As soon as possible', product: undefined },
         ],
-        organicRemedies: result.organicRemedies,
-        chemicalTreatments: result.chemicalTreatments,
-        preventionTips: ['Monitor weekly', 'Maintain good drainage', 'Rotate crops annually'],
-        estimatedRecoveryDays: result.severity === 'healthy' ? 0 : 14,
+        organicRemedies:       result.organicRemedies,
+        chemicalTreatments:    result.chemicalTreatments,
+        sprayInstructions:     result.sprayInstructions,
+        requiredNutrients:     result.requiredNutrients,
+        preventionTips:        result.preventionTips,
+        estimatedRecoveryDays: result.estimatedRecoveryDays,
       },
       aiModel:          result.aiModel,
       processingTimeMs: result.processingTimeMs,
@@ -173,26 +189,30 @@ export const scanCrop = async (req: AuthRequest, res: Response): Promise<void> =
       data: {
         // Return both the flat scan result and the persisted analysis doc
         scan: {
-          plantName: result.plantName,
-          condition: result.condition,
-          confidenceScore: result.confidenceScore,
-          severity: result.severity,
-          symptoms: result.symptoms,
-          recommendedTreatment: result.recommendedTreatment,
-          organicRemedies: result.organicRemedies,
-          chemicalTreatments: result.chemicalTreatments,
-          affectedArea: result.affectedArea,
-          description: result.description,
-          aiModel: result.aiModel,
-          processingTimeMs: result.processingTimeMs,
-          imageUrl: signedUrl || s3Url,
-          uploadSuccess,
-        },
+            plantName:            result.plantName,
+            condition:            result.condition,
+            confidenceScore:      result.confidenceScore,
+            severity:             result.severity,
+            symptoms:             result.symptoms,
+            recommendedTreatment: result.recommendedTreatment,
+            organicRemedies:      result.organicRemedies,
+            chemicalTreatments:   result.chemicalTreatments,
+            sprayInstructions:    result.sprayInstructions,
+            requiredNutrients:    result.requiredNutrients,
+            preventionTips:       result.preventionTips,
+            estimatedRecoveryDays:result.estimatedRecoveryDays,
+            affectedArea:         result.affectedArea,
+            description:          result.description,
+            aiModel:              result.aiModel,
+            processingTimeMs:     result.processingTimeMs,
+            imageUrl:             signedUrl || s3Url,
+            uploadSuccess,
+          },
         analysisId: analysis._id,
       },
     });
   } catch (err) {
-    if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    // No disk file to clean up — memory storage handles GC automatically
     // Re-map AIServiceError to user-friendly HTTP error
     if (err instanceof AIServiceError) {
       const status = aiErrorToHttp(err.code);
