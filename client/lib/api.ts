@@ -212,6 +212,12 @@ export const uploadApi = {
   deleteImage: (id: string) => api.delete(`/upload/${id}`),
 };
 
+// ─── Feedback ───────────────────────────────────────────────────────────────
+export const feedbackApi = {
+  create: (data: Record<string, unknown>) => api.post('/feedback', data),
+  getAll: () => api.get('/feedback'),
+};
+
 // ─── User Profile & Crops ───────────────────────────────────────────────────
 export const userApi = {
   // Profile

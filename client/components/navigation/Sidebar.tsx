@@ -23,6 +23,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Handshake,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
@@ -98,6 +99,12 @@ const navItems = [
     label: 'nav.profile',
     href: '/profile',
     icon: User,
+    roles: ['FARMER', 'BUYER', 'ADMIN'],
+  },
+  {
+    label: 'nav.feedback',
+    href: '/feedback',
+    icon: MessageSquare,
     roles: ['FARMER', 'BUYER', 'ADMIN'],
   },
 ];
