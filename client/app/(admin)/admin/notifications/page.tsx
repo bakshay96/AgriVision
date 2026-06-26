@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast';
 import {
   Send, Bell, Users, Tractor, ShoppingBag, Loader2,
   CheckCircle, Clock, User, Search, X, AlertCircle,
-  History, Filter,
+  History, Filter, LayoutGrid, List,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
@@ -276,7 +276,7 @@ function ComposeTab() {
 
 // ─── History Tab ──────────────────────────────────────────────────────────────
 function HistoryTab() {
-  const { token } = useAppStore();
+  const { token, viewMode, toggleViewMode } = useAppStore();
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState('');
   const [readFilter, setReadFilter] = useState('');
@@ -307,12 +307,22 @@ function HistoryTab() {
           <option value="true">Read</option>
           <option value="false">Unread</option>
         </select>
+        <button
+          onClick={toggleViewMode}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors shadow-sm"
+          title={`Switch to ${viewMode === 'table' ? 'Card' : 'Table'} view`}
+          type="button"
+        >
+          {viewMode === 'table' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
+        </button>
+
         <span className="ml-auto text-xs text-slate-400">{pagination?.total ?? 0} notifications</span>
       </div>
 
-      {/* Mobile Card-based UI */}
-      <div className="grid gap-3 md:hidden">
-        {isLoading ? (
+      {/* Card-based UI */}
+      {viewMode === 'card' ? (
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 animate-pulse">
               <div className="flex justify-between items-center">
@@ -383,9 +393,9 @@ function HistoryTab() {
           ))
         )}
       </div>
-
-      {/* Desktop Table UI */}
-      <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      ) : (
+      /* Table UI */
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-sm">
             <thead>
@@ -460,6 +470,7 @@ function HistoryTab() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (

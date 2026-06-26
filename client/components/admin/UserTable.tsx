@@ -29,6 +29,19 @@ export interface AdminUser {
   createdAt: string;
   lastLogin?: string;
   farmName?: string;
+  farmSizeAcres?: number;
+  phoneNumber?: string;
+  preferredLanguage?: 'en' | 'hi' | 'mr';
+  district?: string;
+  taluka?: string;
+  village?: string;
+  pincode?: string;
+  aadharNumber?: string;
+  bankDetails?: {
+    accountNumber?: string;
+    ifscCode?: string;
+    bankName?: string;
+  };
   updatedBy?: { name: string; email: string } | null;
   updatedAt?: string;
 }
@@ -52,6 +65,7 @@ interface UserTableProps {
   onEdit: (user: AdminUser) => void;
   onDelete: (user: AdminUser) => void;
   onChangePassword?: (user: AdminUser) => void;
+  viewMode: 'table' | 'card';
 }
 
 const roleStyles: Record<string, string> = {
@@ -75,6 +89,7 @@ export default function UserTable({
   onSearchChange, onStatusChange,
   onPageChange, onSort, sortField, sortOrder,
   onEdit, onDelete, onChangePassword,
+  viewMode,
 }: UserTableProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
@@ -85,6 +100,7 @@ export default function UserTable({
     { key: 'isActive', label: 'Status' },
     { key: 'lastLogin', label: 'Last Login' },
     { key: 'createdAt', label: 'Joined' },
+    { key: 'updatedAt', label: 'Last Modified' },
   ];
 
   return (
@@ -117,124 +133,131 @@ export default function UserTable({
         <span className="ml-auto text-xs text-slate-400">{total.toLocaleString()} users</span>
       </div>
 
-      {/* Mobile Card-based UI */}
-      <div className="grid gap-3 md:hidden">
-        {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 animate-pulse" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-1/3 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
-                  <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+      {/* Card-based UI */}
+      {viewMode === 'card' ? (
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-1/3 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                    <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                  </div>
                 </div>
+                <div className="h-3 w-1/4 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
               </div>
-              <div className="h-3 w-1/4 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ))
+          ) : users.length === 0 ? (
+            <div className="col-span-full rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-slate-400 text-sm">
+              No users found
             </div>
-          ))
-        ) : users.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-slate-400 text-sm">
-            No users found
-          </div>
-        ) : (
-          users.map((u) => (
-            <motion.div
-              key={u._id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm hover:border-amber-400/50 transition-colors"
-            >
-              {/* Card Header: Avatar & Profile */}
-              <div className="flex items-start justify-between gap-2.5">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 text-white text-xs font-bold shadow-sm">
-                    {u.name.charAt(0).toUpperCase()}
+          ) : (
+            users.map((u) => (
+              <motion.div
+                key={u._id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm hover:border-amber-400/50 transition-colors"
+              >
+                {/* Card Header: Avatar & Profile */}
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 text-white text-xs font-bold shadow-sm">
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-bold text-slate-800 dark:text-white text-sm">{u.name}</p>
+                      <p className="truncate text-xs text-slate-400">{u.email}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-bold text-slate-800 dark:text-white text-sm">{u.name}</p>
-                    <p className="truncate text-xs text-slate-400">{u.email}</p>
+
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', roleStyles[u.role] || 'bg-slate-100 text-slate-600')}>
+                      {u.role}
+                    </span>
+                    <span className={cn(
+                      'flex items-center gap-1 text-[10px] font-bold',
+                      u.isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-500 dark:text-red-400'
+                    )}>
+                      <span className={cn('h-1.5 w-1.5 rounded-full', u.isActive ? 'bg-indigo-500' : 'bg-red-500')} />
+                      {u.isActive ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                  <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', roleStyles[u.role] || 'bg-slate-100 text-slate-600')}>
-                    {u.role}
-                  </span>
-                  <span className={cn(
-                    'flex items-center gap-1 text-[10px] font-bold',
-                    u.isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-500 dark:text-red-400'
-                  )}>
-                    <span className={cn('h-1.5 w-1.5 rounded-full', u.isActive ? 'bg-indigo-500' : 'bg-red-500')} />
-                    {u.isActive ? 'Active' : 'Inactive'}
-                  </span>
+                {/* Card details */}
+                <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-50 dark:border-slate-800/60 pt-3 text-slate-500 dark:text-slate-400">
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase tracking-wider">State</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{u.state || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Farm Name</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{u.farmName || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Last Login</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      {u.lastLogin ? format(new Date(u.lastLogin), 'MMM d, yyyy') : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Joined</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      {format(new Date(u.createdAt), 'MMM d, yyyy')}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Card details */}
-              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-50 dark:border-slate-800/60 pt-3 text-slate-500 dark:text-slate-400">
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">State</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">{u.state || '—'}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Farm Name</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">{u.farmName || '—'}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Last Login</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    {u.lastLogin ? format(new Date(u.lastLogin), 'MMM d, yyyy') : '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Joined</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    {format(new Date(u.createdAt), 'MMM d, yyyy')}
-                  </span>
-                </div>
-              </div>
+                {u.updatedBy && (
+                  <div className="text-[10px] bg-amber-500/5 rounded px-2.5 py-1.5 flex flex-col gap-0.5 border border-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <span className="font-bold uppercase tracking-wider text-[8px] text-slate-400">Last Modified</span>
+                    <span className="font-semibold text-slate-700 dark:text-amber-300">✎ {u.updatedBy.email}</span>
+                    {u.updatedAt && (
+                      <span className="text-slate-400 mt-0.5">
+                        {format(new Date(u.updatedAt), 'MMM d, yyyy · hh:mm a')}
+                      </span>
+                    )}
+                  </div>
+                )}
 
-              {u.updatedBy && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/5 rounded px-2 py-1 flex items-center gap-1">
-                  <span>✎ Edited by {u.updatedBy.name}</span>
-                </p>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 border-t border-slate-50 dark:border-slate-800/60 pt-3 justify-end">
-                <button
-                  onClick={() => onEdit(u)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <Pencil className="h-3 w-3" /> Edit
-                </button>
-                {onChangePassword && (
+                {/* Action Buttons */}
+                <div className="flex gap-2 border-t border-slate-50 dark:border-slate-800/60 pt-3 justify-end">
                   <button
-                    onClick={() => onChangePassword(u)}
+                    onClick={() => onEdit(u)}
                     className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                   >
-                    <Key className="h-3 w-3" /> Password
+                    <Pencil className="h-3 w-3" /> Edit
                   </button>
-                )}
-                <button
-                  onClick={() => onDelete(u)}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold border transition-colors',
-                    u.isActive
-                      ? 'border-red-100 bg-red-50 text-red-600 dark:bg-red-950/20 dark:border-red-900/30'
-                      : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-300'
+                  {onChangePassword && (
+                    <button
+                      onClick={() => onChangePassword(u)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <Key className="h-3 w-3" /> Password
+                    </button>
                   )}
-                >
-                  <Trash2 className="h-3 w-3" /> {u.isActive ? 'Deactivate' : 'Delete'}
-                </button>
-              </div>
-            </motion.div>
-          ))
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                  <button
+                    onClick={() => onDelete(u)}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold border transition-colors',
+                      u.isActive
+                        ? 'border-red-100 bg-red-50 text-red-600 dark:bg-red-950/20 dark:border-red-900/30'
+                        : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-300'
+                    )}
+                  >
+                    <Trash2 className="h-3 w-3" /> {u.isActive ? 'Deactivate' : 'Delete'}
+                  </button>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </div>
+      ) : (
+        /* Table */
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/50">
@@ -259,7 +282,7 @@ export default function UserTable({
             {isLoading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: 8 }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-3.5 w-full animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
                     </td>
@@ -268,7 +291,7 @@ export default function UserTable({
               ))
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center text-slate-400 text-sm">
+                <td colSpan={8} className="py-16 text-center text-slate-400 text-sm">
                   No users found
                 </td>
               </tr>
@@ -289,11 +312,6 @@ export default function UserTable({
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-800 dark:text-white text-sm">{u.name}</p>
                         <p className="truncate text-xs text-slate-400">{u.email}</p>
-                        {u.updatedBy && (
-                          <p className="truncate text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                            ✎ Edited by {u.updatedBy.name}
-                          </p>
-                        )}
                       </div>
                     </div>
                   </td>
@@ -331,52 +349,53 @@ export default function UserTable({
                     {format(new Date(u.createdAt), 'MMM d, yyyy')}
                   </td>
 
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right">
-                    <div className="relative inline-block">
-                      <button
-                        onClick={() => setOpenMenu(openMenu === u._id ? null : u._id)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 transition-colors"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
+                  {/* Last Modified */}
+                  <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                    {u.updatedBy ? (
+                      <div className="flex flex-col min-w-[140px]">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300 truncate" title={`${u.updatedBy.name} (${u.updatedBy.email})`}>
+                          ✎ {u.updatedBy.email}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {u.updatedAt ? format(new Date(u.updatedAt), 'MMM d, yyyy · hh:mm a') : '—'}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-700">—</span>
+                    )}
+                  </td>
 
-                      <AnimatePresence>
-                        {openMenu === u._id && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                            transition={{ duration: 0.12 }}
-                            className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden"
-                          >
-                            <button
-                              onClick={() => { onEdit(u); setOpenMenu(null); }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Edit User
-                            </button>
-                            {onChangePassword && (
-                              <button
-                                onClick={() => { onChangePassword(u); setOpenMenu(null); }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
-                              >
-                                <Key className="h-3.5 w-3.5" />
-                                Change Password
-                              </button>
-                            )}
-                            <div className="border-t border-slate-100 dark:border-slate-800" />
-                            <button
-                              onClick={() => { onDelete(u); setOpenMenu(null); }}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              {u.isActive ? 'Deactivate' : 'Delete'}
-                            </button>
-                          </motion.div>
+                  {/* Actions */}
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => onEdit(u)}
+                        className="rounded-lg p-1.5 text-slate-505 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
+                        title="Edit User"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      {onChangePassword && (
+                        <button
+                          onClick={() => onChangePassword(u)}
+                          className="rounded-lg p-1.5 text-slate-550 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
+                          title="Change Password"
+                        >
+                          <Key className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onDelete(u)}
+                        className={cn(
+                          'rounded-lg p-1.5 transition-colors',
+                          u.isActive
+                            ? 'text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
+                            : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                         )}
-                      </AnimatePresence>
+                        title={u.isActive ? 'Deactivate User' : 'Delete User'}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </td>
                 </motion.tr>
@@ -385,6 +404,7 @@ export default function UserTable({
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
