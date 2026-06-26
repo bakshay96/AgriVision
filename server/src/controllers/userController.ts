@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
+import Notification from '../models/Notification';
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 
@@ -301,6 +302,71 @@ export const updateSelectedCrops = async (req: AuthRequest, res: Response) => {
     return res.status(statusCode).json({
       success: false,
       message: errorMessage
+    });
+  }
+};
+
+// ─── Get User's Notifications ──────────────────────────────────────────────
+export const getUserNotifications = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    const notifications = await Notification.find({ userId }).sort({ createdAt: -1 }).limit(50);
+    res.json({
+      success: true,
+      data: notifications
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching notifications',
+      error: (error as Error).message
+    });
+  }
+};
+
+// ─── Mark All User's Notifications as Read ──────────────────────────────────
+export const markAllUserNotificationsRead = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    await Notification.updateMany({ userId, isRead: false }, { $set: { isRead: true } });
+    res.json({
+      success: true,
+      message: 'All notifications marked as read'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error marking notifications read',
+      error: (error as Error).message
+    });
+  }
+};
+
+// ─── Mark Single Notification as Read ───────────────────────────────────────
+export const markUserNotificationRead = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    const { id } = req.params;
+    const notif = await Notification.findOneAndUpdate(
+      { _id: id, userId },
+      { $set: { isRead: true } },
+      { new: true }
+    );
+    if (!notif) {
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found'
+      });
+    }
+    res.json({
+      success: true,
+      data: notif
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error marking notification read',
+      error: (error as Error).message
     });
   }
 };

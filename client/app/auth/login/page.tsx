@@ -233,16 +233,43 @@ export default function LoginPage() {
 
   const { mutate: login, isPending: loginPending } = useMutation({
     mutationFn: () => authApi.login({ email: loginForm.email, password: loginForm.password }),
-    onMutate: () => { showLoader({ variant: 'auth', message: 'Signing In' }); setFormMessage(null); },
+    onMutate: () => { 
+      showLoader({ 
+        variant: 'auth', 
+        message: 'Verifying Credentials', 
+        subtitle: 'Authenticating your session with AgriVision server…' 
+      }); 
+      setFormMessage(null); 
+    },
     onSuccess: (res) => {
       const { user, token } = res.data.data;
-      setFormMessage({ type: 'success', title: 'Login Successful!', message: `Welcome back, ${user.name}! Redirecting…` });
       setUser(user, token);
-      toast.success(`Welcome back, ${user.name}!`, { description: 'Redirecting to dashboard…' });
-      hideLoader();
+      
+      showLoader({
+        variant: 'auth',
+        message: 'Please wait…',
+        subtitle: 'Establishing secure session layer…'
+      });
+
+      setTimeout(() => {
+        showLoader({
+          variant: 'auth',
+          message: 'Loading Workspace',
+          subtitle: `Retrieving dashboard preferences for ${user.name}…`
+        });
+      }, 700);
+
+      setTimeout(() => {
+        showLoader({
+          variant: 'auth',
+          message: 'Almost completed',
+          subtitle: 'Redirecting to your personalized home screen…'
+        });
+      }, 1400);
+
       setTimeout(() => {
         router.push(user.role?.toUpperCase() === 'ADMIN' ? '/admin/dashboard' : '/dashboard');
-      }, 500);
+      }, 2000);
     },
     onError: (err: unknown) => {
       hideLoader();
@@ -258,14 +285,43 @@ export default function LoginPage() {
       farmLocation: registerForm.farmLocation ? { address: registerForm.farmLocation } : undefined,
       farmSizeAcres: registerForm.farmSizeAcres ? Number(registerForm.farmSizeAcres) : undefined,
     }),
-    onMutate: () => { showLoader({ variant: 'auth', message: 'Creating Account' }); setFormMessage(null); },
+    onMutate: () => { 
+      showLoader({ 
+        variant: 'auth', 
+        message: 'Creating Account', 
+        subtitle: 'Registering tenant credentials in security vault…' 
+      }); 
+      setFormMessage(null); 
+    },
     onSuccess: (res) => {
       const { user, token } = res.data.data;
-      setFormMessage({ type: 'success', title: 'Account Created!', message: `Welcome to AgriVision Pro, ${user.name}!` });
       setUser(user, token);
-      toast.success('Account Created Successfully!', { description: `Welcome, ${user.name}!` });
-      hideLoader();
-      setTimeout(() => { router.push('/dashboard'); }, 500);
+
+      showLoader({
+        variant: 'auth',
+        message: 'Provisioning Space',
+        subtitle: 'Configuring custom AgriVision tenant storage…'
+      });
+
+      setTimeout(() => {
+        showLoader({
+          variant: 'auth',
+          message: 'Initializing Dashboard',
+          subtitle: 'Setting up agricultural tools and data hubs…'
+        });
+      }, 750);
+
+      setTimeout(() => {
+        showLoader({
+          variant: 'auth',
+          message: 'Almost completed',
+          subtitle: 'Redirecting to your fresh dashboard…'
+        });
+      }, 1500);
+
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2100);
     },
     onError: (err: unknown) => {
       hideLoader();

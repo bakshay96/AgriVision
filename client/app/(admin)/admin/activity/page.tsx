@@ -137,77 +137,151 @@ export default function AdminActivityPage() {
           <Activity className="h-4 w-4 text-slate-400" />
           <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Recent Logins (Last 30 Days)</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50">
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">User</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Role</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">State</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Last Login</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-3 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (data?.recentLogins || []).length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-sm text-slate-400">No recent activity</td>
-                </tr>
-              ) : (
-                (data.recentLogins as {
-                  _id: string; name: string; email: string; role: string;
-                  state?: string; lastLogin: string; isActive: boolean;
-                }[]).map((u) => (
-                  <tr key={u._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-white text-[10px] font-bold flex-shrink-0">
-                          {u.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-medium text-slate-800 dark:text-white">{u.name}</p>
-                          <p className="truncate text-[10px] text-slate-400">{u.email}</p>
-                        </div>
+        <div className="overflow-hidden">
+          {/* Mobile Card-based UI */}
+          <div className="grid gap-3 md:hidden p-4">
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+                  <div className="flex items-center gap-3 animate-pulse">
+                    <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-1/3 rounded bg-slate-100 dark:bg-slate-800" />
+                      <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (data?.recentLogins || []).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-slate-400 text-sm">
+                No recent activity
+              </div>
+            ) : (
+              (data.recentLogins as {
+                _id: string; name: string; email: string; role: string;
+                state?: string; lastLogin: string; isActive: boolean;
+              }[]).map((u) => (
+                <motion.div
+                  key={u._id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-white text-[10px] font-bold flex-shrink-0">
+                        {u.name.charAt(0).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', ROLE_COLORS[u.role] || 'bg-slate-100 text-slate-600')}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {u.state || <span className="text-slate-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-xs text-slate-700 dark:text-slate-300">{format(new Date(u.lastLogin), 'MMM d, yyyy HH:mm')}</p>
-                        <p className="text-[10px] text-slate-400">{formatDistanceToNow(new Date(u.lastLogin), { addSuffix: true })}</p>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-slate-800 dark:text-white">{u.name}</p>
+                        <p className="truncate text-[10px] text-slate-400">{u.email}</p>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
+                    </div>
+                    <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider', ROLE_COLORS[u.role] || 'bg-slate-100 text-slate-600')}>
+                      {u.role}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-50 dark:border-slate-800/60 pt-3 text-slate-500 dark:text-slate-400">
+                    <div>
+                      <span className="block text-[9px] text-slate-400 uppercase tracking-wider">State</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">{u.state || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-slate-400 uppercase tracking-wider">Status</span>
                       <span className={cn(
-                        'flex items-center gap-1 text-xs font-medium',
+                        'flex items-center gap-1 font-semibold text-xs mt-0.5',
                         u.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
                       )}>
-                        <span className={cn('h-1.5 w-1.5 rounded-full', u.isActive ? 'bg-emerald-500' : 'bg-red-500')} />
+                        <span className={cn('h-1 w-1 rounded-full', u.isActive ? 'bg-emerald-500' : 'bg-red-500')} />
                         {u.isActive ? 'Active' : 'Inactive'}
                       </span>
-                    </td>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-50 dark:border-slate-800/60 pt-3 flex flex-col gap-0.5">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider">Last Login</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-200 font-semibold">{format(new Date(u.lastLogin), 'MMM d, yyyy HH:mm')}</span>
+                    <span className="text-[10px] text-slate-400">{formatDistanceToNow(new Date(u.lastLogin), { addSuffix: true })}</span>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table UI */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/50">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">User</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Role</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">State</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Last Login</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {isLoading ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i}>
+                      {Array.from({ length: 5 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3">
+                          <div className="h-3 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (data?.recentLogins || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-sm text-slate-400">No recent activity</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  (data.recentLogins as {
+                    _id: string; name: string; email: string; role: string;
+                    state?: string; lastLogin: string; isActive: boolean;
+                  }[]).map((u) => (
+                    <tr key={u._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-white text-[10px] font-bold flex-shrink-0">
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-slate-800 dark:text-white">{u.name}</p>
+                            <p className="truncate text-[10px] text-slate-400">{u.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', ROLE_COLORS[u.role] || 'bg-slate-100 text-slate-600')}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {u.state || <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="text-xs text-slate-700 dark:text-slate-300">{format(new Date(u.lastLogin), 'MMM d, yyyy HH:mm')}</p>
+                          <p className="text-[10px] text-slate-400">{formatDistanceToNow(new Date(u.lastLogin), { addSuffix: true })}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn(
+                          'flex items-center gap-1 text-xs font-medium',
+                          u.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'
+                        )}>
+                          <span className={cn('h-1.5 w-1.5 rounded-full', u.isActive ? 'bg-emerald-500' : 'bg-red-500')} />
+                          {u.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </motion.div>
     </div>

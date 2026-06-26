@@ -2,8 +2,10 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster } from 'sonner';
+import { usePathname } from 'next/navigation';
+import { useLoader } from '@/hooks/useLoader';
 
 import { ThemeProvider } from 'next-themes';
 import { GlobalLoader } from '@/components/ui/GlobalLoader';
@@ -24,6 +26,13 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
+  const pathname = usePathname();
+  const { hideLoader } = useLoader();
+
+  useEffect(() => {
+    hideLoader();
+  }, [pathname, hideLoader]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
@@ -40,3 +49,4 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   );
 }
+

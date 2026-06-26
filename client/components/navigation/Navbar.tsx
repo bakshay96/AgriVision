@@ -9,9 +9,17 @@ import { useLanguageStore } from '@/store/useLanguageStore';
 import { useTheme } from 'next-themes';
 import { formatRelativeTime } from '@/lib/utils';
 import LocationPicker from '@/components/location/LocationPicker';
+import { useUserNotifications, useMarkAllNotificationsRead, useMarkNotificationRead } from '@/hooks/useUserNotifications';
+import { cn } from '@/lib/utils';
+
 
 export default function Navbar() {
-  const { user, toggleSidebar, markAllRead, unreadCount, notifications, clearUser } = useAppStore();
+  const { user, toggleSidebar, clearUser } = useAppStore();
+  const { data: dbNotifications = [] } = useUserNotifications();
+  const markAllReadMutation = useMarkAllNotificationsRead();
+  const markReadMutation = useMarkNotificationRead();
+
+  const unreadCount = dbNotifications.filter((n) => !n.isRead).length;
   const { language, setLanguage, t } = useLanguageStore();
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -144,7 +152,12 @@ export default function Navbar() {
           {/* Notifications */}
           <div className="relative" ref={notifRef}>
             <button
-              onClick={() => { setNotifOpen(!notifOpen); if (!notifOpen) markAllRead(); }}
+              onClick={() => {
+                setNotifOpen(!notifOpen);
+                if (!notifOpen && unreadCount > 0) {
+                  markAllReadMutation.mutate();
+                }
+              }}
               className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <Bell className="h-5 w-5" />
@@ -160,16 +173,30 @@ export default function Navbar() {
                     <button onClick={() => setNotifOpen(false)}><X className="h-4 w-4 text-slate-400" /></button>
                   </div>
                   <div className="max-h-[400px] overflow-y-auto">
-                    {notifications.length === 0 ? (
+                    {dbNotifications.length === 0 ? (
                       <div className="p-10 text-center text-slate-400 text-sm">No new notifications</div>
                     ) : (
-                      notifications.slice(0, 10).map((n) => (
-                        <div key={n.id} className="p-4 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/80 dark:hover:bg-slate-800/80 transition-colors">
+                      dbNotifications.slice(0, 10).map((n) => (
+                        <div
+                          key={n._id}
+                          onClick={() => {
+                            if (!n.isRead) {
+                              markReadMutation.mutate(n._id);
+                            }
+                          }}
+                          className={cn(
+                            "p-4 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/80 dark:hover:bg-slate-800/80 transition-colors cursor-pointer",
+                            !n.isRead && "bg-amber-50/20 dark:bg-amber-950/10"
+                          )}
+                        >
                           <div className="flex gap-3">
                             <span className="text-xl">{getNotifIcon(n.type)}</span>
                             <div>
-                              <p className="text-xs text-slate-600 dark:text-slate-300">{n.message}</p>
-                              <p className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(n.timestamp)}</p>
+                              <p className={cn(
+                                "text-xs",
+                                n.isRead ? "text-slate-500 dark:text-slate-400" : "text-slate-800 dark:text-slate-200 font-semibold"
+                              )}>{n.message}</p>
+                              <p className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(n.createdAt)}</p>
                             </div>
                           </div>
                         </div>
