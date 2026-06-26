@@ -24,6 +24,7 @@ const cropEncyclopedia_1 = __importDefault(require("./routes/cropEncyclopedia"))
 const financial_1 = __importDefault(require("./routes/financial"));
 const upload_1 = __importDefault(require("./routes/upload"));
 const user_1 = __importDefault(require("./routes/user"));
+const feedback_1 = __importDefault(require("./routes/feedback"));
 const homeController_1 = require("./controllers/homeController");
 const errorHandler_1 = require("./middleware/errorHandler");
 const app = (0, express_1.default)();
@@ -111,6 +112,7 @@ app.use('/api/crop-encyclopedia', cropEncyclopedia_1.default);
 app.use('/api/financial', financial_1.default);
 app.use('/api/upload', upload_1.default);
 app.use('/api/user', user_1.default);
+app.use('/api/feedback', feedback_1.default);
 // ─── 404 & Error Handler ──────────────────────────────────────────────────────
 app.use(errorHandler_1.notFound);
 app.use(errorHandler_1.errorHandler);

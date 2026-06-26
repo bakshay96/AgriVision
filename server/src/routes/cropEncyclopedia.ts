@@ -7,6 +7,7 @@ import {
   getCropByName,
   getPestsAndDiseases,
   getCropAdvice,
+  aiSearchCrop,
 } from '../controllers/cropEncyclopediaController';
 
 const router = Router();
@@ -14,22 +15,15 @@ const router = Router();
 // All routes require authentication
 router.use(protect);
 
-// Get all crops
+// ── Server-side AI search proxy (keeps Gemini key out of browser) ──────────────
+router.post('/ai-search', aiSearchCrop);
+
+// ── Standard CRUD ───────────────────────────────────────────────────────────────
 router.get('/', getAllCrops);
-
-// Search crops
 router.get('/search', searchCrops);
-
-// Get crop by name
 router.get('/name/:name', getCropByName);
-
-// Get single crop details
 router.get('/:id', getCropById);
-
-// Get pests and diseases
 router.get('/:id/pests-diseases', getPestsAndDiseases);
-
-// Get AI advice
 router.post('/:id/advice', getCropAdvice);
 
 export default router;

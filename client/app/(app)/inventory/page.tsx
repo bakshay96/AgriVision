@@ -699,6 +699,7 @@ export default function InventoryPage() {
                                 otherPartyName={order.buyerId?.name}
                                 otherPartyRole="BUYER"
                                 isExpanded={false}
+                                className="h-[450px]"
                               />
                             </div>
                           </motion.div>

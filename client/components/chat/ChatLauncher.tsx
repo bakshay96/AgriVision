@@ -24,8 +24,7 @@ export default function ChatLauncher() {
   const { data: ordersData, isLoading } = useQuery({
     queryKey: ['orders-recent-chat'],
     queryFn: () => ordersApi.getAll({ limit: 10 }).then(r => r.data.data),
-    refetchInterval: 60000, // 60s fallback — socket events handle real-time invalidation
-    staleTime: 30 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const orders = ordersData?.orders || [];
@@ -346,7 +345,7 @@ export default function ChatLauncher() {
             initial={{ scale: 1, opacity: 0.5 }}
             animate={{ scale: 1.5, opacity: 0 }}
             transition={{ duration: 0.5 }}
-            className="absolute inset-0 rounded-full bg-red-400" 
+            className="absolute inset-0 rounded-full bg-red-400 pointer-events-none" 
           />
         )}
         
@@ -355,7 +354,7 @@ export default function ChatLauncher() {
           <motion.span
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 1.5, repeat: Infinity }}
-            className="absolute inset-0 rounded-full border-2 border-red-400"
+            className="absolute inset-0 rounded-full border-2 border-red-400 pointer-events-none"
           />
         )}
       </div>

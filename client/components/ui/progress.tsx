@@ -34,7 +34,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
         aria-valuemin={0}
         aria-valuemax={100}
         className={cn(
-          'relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200',
+          'relative h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800',
           className
         )}
         {...props}

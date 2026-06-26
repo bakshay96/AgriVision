@@ -2,131 +2,65 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard,
-  Microscope,
-  ShoppingCart,
-  Package,
-  Leaf,
-  X,
-  ChevronRight,
-  ChevronLeft,
-  ChevronsLeft,
-  ChevronsRight,
-  ShoppingBag,
-  Cloud,
-  TrendingUp,
-  BookOpen,
-  Wallet,
-  User,
-  PanelLeft,
-  PanelLeftClose,
-  Handshake,
+  LayoutDashboard, Microscope, ShoppingCart, Package,
+  Leaf, X, ChevronRight, ShoppingBag, Cloud, TrendingUp,
+  BookOpen, Wallet, User, Handshake, MessageSquare, MessageCircle,
+  ChevronLeft, LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { useLanguageStore } from '@/store/useLanguageStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
-import { useEffect } from 'react';
+import { useChatStore } from '@/store/useChatStore';
+import { useEffect, useState } from 'react';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Navigation items (role-based filtering happens below)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Nav items ────────────────────────────────────────────────────────────────
 const navItems = [
-  {
-    label: 'nav.dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
-  {
-    label: 'nav.weather',
-    href: '/weather',
-    icon: Cloud,
-    roles: ['FARMER', 'ADMIN'],
-  },
-  {
-    label: 'nav.marketPrices',
-    href: '/market-prices',
-    icon: TrendingUp,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
-  {
-    label: 'nav.encyclopedia',
-    href: '/crop-encyclopedia',
-    icon: BookOpen,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
-  {
-    label: 'nav.health',
-    href: '/health-monitor',
-    icon: Microscope,
-    roles: ['FARMER', 'ADMIN'],
-  },
-  {
-    label: 'nav.marketplace',
-    href: '/marketplace',
-    icon: ShoppingCart,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
-  {
-    label: 'nav.inventory',
-    href: '/inventory',
-    icon: Package,
-    roles: ['FARMER', 'ADMIN'],
-  },
-  {
-    label: 'nav.orders',
-    href: '/orders',
-    icon: ShoppingBag,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
-  {
-    label: 'nav.negotiations',
-    href: '/negotiations',
-    icon: Handshake,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
-  {
-    label: 'nav.financial',
-    href: '/financial',
-    icon: Wallet,
-    roles: ['FARMER', 'ADMIN'],
-  },
-  {
-    label: 'nav.profile',
-    href: '/profile',
-    icon: User,
-    roles: ['FARMER', 'BUYER', 'ADMIN'],
-  },
+  { label: 'nav.dashboard',    href: '/dashboard',        icon: LayoutDashboard, roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.weather',      href: '/weather',           icon: Cloud,           roles: ['FARMER', 'ADMIN'] },
+  { label: 'nav.marketPrices', href: '/market-prices',     icon: TrendingUp,      roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.encyclopedia', href: '/crop-encyclopedia', icon: BookOpen,        roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.health',       href: '/health-monitor',    icon: Microscope,      roles: ['FARMER', 'ADMIN'] },
+  { label: 'nav.marketplace',  href: '/marketplace',       icon: ShoppingCart,    roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.inventory',    href: '/inventory',         icon: Package,         roles: ['FARMER', 'ADMIN'] },
+  { label: 'nav.orders',       href: '/orders',            icon: ShoppingBag,     roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.negotiations', href: '/negotiations',      icon: Handshake,       roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.chat',         href: '/chat',              icon: MessageSquare,   roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.financial',    href: '/financial',         icon: Wallet,          roles: ['FARMER', 'ADMIN'] },
+  { label: 'nav.profile',      href: '/profile',           icon: User,            roles: ['FARMER', 'BUYER', 'ADMIN'] },
+  { label: 'nav.feedback',     href: '/feedback',          icon: MessageCircle,   roles: ['FARMER', 'BUYER', 'ADMIN'] },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sidebar component with desktop icon-only collapsible mode
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
   const { user, isSidebarOpen, setSidebarOpen, isSidebarCollapsed, toggleSidebarCollapse, clearUser } = useAppStore();
   const { t } = useLanguageStore();
 
-  // Read badge counts from the central notification store (updated by useSocket)
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const pendingNegotiationCount = useNotificationStore(s => s.pendingNegotiationCount);
   const pendingOrderCount       = useNotificationStore(s => s.pendingOrderCount);
   const clearNegotiationBadge   = useNotificationStore(s => s.clearNegotiationBadge);
   const clearOrderBadge         = useNotificationStore(s => s.clearOrderBadge);
+  const totalUnreadCount        = useChatStore(s => s.totalUnreadCount);
 
-  // Clear badges when the user navigates to the relevant page
   useEffect(() => {
     if (pathname.includes('/negotiations')) clearNegotiationBadge();
     if (pathname.includes('/orders'))       clearOrderBadge();
   }, [pathname, clearNegotiationBadge, clearOrderBadge]);
 
-  // Normalize to uppercase so both 'farmer' (old localStorage) and 'FARMER' (new) work
   const filteredNav = navItems.filter(
-    (item) => user && item.roles.includes(user.role.toUpperCase())
+    item => user && item.roles.includes(user.role.toUpperCase())
   );
 
   const handleLogout = () => {
@@ -134,175 +68,181 @@ export default function Sidebar() {
     router.push('/auth/login');
   };
 
+  // ── Sidebar width values ──
+  const EXPANDED_W  = 240; // px
+  const COLLAPSED_W = 68;  // px
+
   return (
     <>
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* Mobile overlay (only shown on small screens when sidebar is open) */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* ── Mobile overlay ────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* Main sidebar — responsive width based on breakpoint */}
-      {/* Desktop (md+): icon-only when collapsed, full when expanded */}
-      {/* Mobile: fixed overlay when opened */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* ── Sidebar wrapper (handles desktop width/mobile slide animation) ── */}
       <motion.aside
         initial={false}
         animate={{
-          x: isSidebarOpen ? 0 : '-100%',
-          width: isSidebarOpen ? 'auto' : 'auto',
+          // Mobile: slide in/out. Desktop: animate width
+          x: isMobile ? (isSidebarOpen ? 0 : -240) : 0,
+          width: isMobile ? 240 : (isSidebarCollapsed ? COLLAPSED_W : EXPANDED_W),
         }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 260 }}
         className={cn(
-          'fixed left-0 top-0 z-30 flex h-full flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl',
-          'md:relative md:translate-x-0 md:shadow-none',
-          // Desktop: responsive width based on collapsed state
-          isSidebarCollapsed ? 'md:w-[72px]' : 'md:w-64',
-          // Mobile: always 256px when visible
-          'w-64'
+          // Base — always a vertical flex column
+          'relative flex flex-col h-full flex-shrink-0',
+          'border-r border-slate-200 dark:border-slate-800',
+          'bg-white dark:bg-slate-900',
+          // Mobile: fixed overlay
+          'fixed left-0 top-0 z-30 shadow-xl md:relative md:shadow-none md:z-auto',
+          // Mobile: animate translate, Desktop: no translate needed (width handles it)
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          // Mobile width always 240
+          'w-60 md:w-auto',
         )}
       >
-        {/* Logo section */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4 py-5 md:justify-center md:px-2 md:py-4">
-          {/* Logo + text (hidden when collapsed on desktop) */}
-          <Link href="/dashboard" className={cn("flex items-center gap-2.5", isSidebarCollapsed ? "md:hidden" : "flex")}>
+        {/* ── Logo / Brand ────────────────────────────────────────────────── */}
+        <div className={cn(
+          'flex items-center border-b border-slate-100 dark:border-slate-800 shrink-0',
+          'h-16 px-4 transition-all duration-300',
+          isSidebarCollapsed ? 'justify-center px-2' : 'justify-between'
+        )}>
+          <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600">
               <Leaf className="h-4 w-4 text-white" />
             </div>
-            <div className={cn("flex flex-col", isSidebarCollapsed ? "md:hidden" : "flex")}>
-              <p className="text-sm font-bold text-slate-900 dark:text-white">AgriVision</p>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">Pro</p>
-            </div>
+            <AnimatePresence initial={false}>
+              {!isSidebarCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col overflow-hidden whitespace-nowrap"
+                >
+                  <span className="text-sm font-bold text-slate-900 dark:text-white leading-tight">AgriVision</span>
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 leading-tight">Pro</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </Link>
 
-          {/* Icon-only logo (shown when collapsed on desktop) */}
-          <Link href="/dashboard" className={cn("hidden", isSidebarCollapsed ? "md:flex" : "md:hidden")}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600">
-              <Leaf className="h-4 w-4 text-white" />
-            </div>
-          </Link>
-
-          {/* Close button (mobile only) */}
+          {/* Mobile close button */}
           <button
             onClick={() => setSidebarOpen(false)}
-            className="rounded-md p-1 text-slate-400 hover:text-slate-600 md:hidden"
+            className="md:hidden rounded-md p-1 text-slate-400 hover:text-slate-600 shrink-0"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Farm info section (icon-only when collapsed, full when expanded) */}
+        {/* ── User info pill ──────────────────────────────────────────────── */}
         {user && (
-          <div className="border-b border-slate-100 dark:border-slate-800 px-3 py-3 md:flex md:justify-center md:px-2">
-            {/* Full card (shown when not collapsed) */}
-            <div className={cn("rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2.5 w-full", isSidebarCollapsed ? "hidden" : "block")}>
-              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 truncate">
-                {user.farmName || user.name}
-              </p>
-              <p className="text-xs text-emerald-600 dark:text-emerald-500 capitalize">{user.role?.toLowerCase() || 'user'}</p>
-            </div>
-
-            {/* Icon-only avatar (shown when collapsed on desktop) */}
-            <div className={cn("hidden md:flex md:h-8 md:w-8 md:items-center md:justify-center md:rounded-full md:bg-emerald-600 md:text-xs md:font-bold md:text-white", isSidebarCollapsed ? "md:flex" : "md:hidden")}>
-              {(user.name || 'U').charAt(0).toUpperCase()}
-            </div>
+          <div className={cn(
+            'border-b border-slate-100 dark:border-slate-800 px-3 py-3 shrink-0 flex',
+            isSidebarCollapsed ? 'justify-center' : ''
+          )}>
+            {isSidebarCollapsed ? (
+              // Collapsed: avatar only
+              <div className="h-8 w-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                {(user.name || 'U').charAt(0).toUpperCase()}
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2.5 w-full min-w-0"
+              >
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 truncate">
+                  {user.farmName || user.name}
+                </p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-500 capitalize">
+                  {user.role?.toLowerCase() || 'user'}
+                </p>
+              </motion.div>
+            )}
           </div>
         )}
 
-        {/* Navigation items */}
-        <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 md:flex md:flex-col md:items-center md:px-1 relative">
-          {/* Collapse toggle button - positioned at top right of navigation */}
-          <div className="hidden md:flex w-full justify-end mb-2 px-1">
-            <motion.button 
-              onClick={toggleSidebarCollapse}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-all"
-              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <motion.div
-                animate={{ 
-                  rotate: isSidebarCollapsed ? 180 : 0,
-                  x: isSidebarCollapsed ? 0 : 0
-                }}
-                transition={{ duration: 0.3, type: "spring", stiffness: 200 }}
-              >
-                {isSidebarCollapsed ? (
-                  <ChevronsRight className="h-4 w-4" />
-                ) : (
-                  <ChevronsLeft className="h-4 w-4" />
-                )}
-              </motion.div>
-            </motion.button>
-          </div>
-
-          {filteredNav.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-            const Icon = item.icon;
+        {/* ── Nav items ────────────────────────────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 overflow-x-hidden">
+          {filteredNav.map(item => {
+            const isActive       = pathname === item.href || pathname.startsWith(item.href + '/');
+            const Icon           = item.icon;
             const isNegotiations = item.href === '/negotiations';
             const isOrders       = item.href === '/orders';
-            const showBadge =
-              (isNegotiations && pendingNegotiationCount > 0) ||
-              (isOrders && pendingOrderCount > 0);
-            const badgeCount = isNegotiations ? pendingNegotiationCount : isOrders ? pendingOrderCount : 0;
+            const isChat         = item.href === '/chat';
+            const showBadge      = (isNegotiations && pendingNegotiationCount > 0) || 
+                                   (isOrders && pendingOrderCount > 0) ||
+                                   (isChat && totalUnreadCount > 0);
+            const badgeCount     = isNegotiations 
+              ? pendingNegotiationCount 
+              : isOrders 
+                ? pendingOrderCount 
+                : totalUnreadCount;
 
             return (
-              <Link key={item.href} href={item.href} className="w-full">
+              <Link key={item.href} href={item.href} onClick={() => setSidebarOpen(false)}>
                 <motion.div
-                  whileHover={{ x: isSidebarCollapsed ? 0 : 2 }}
+                  whileHover={{ x: isSidebarCollapsed ? 0 : 3 }}
+                  whileTap={{ scale: 0.97 }}
+                  title={isSidebarCollapsed ? t(item.label) : undefined}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors group relative',
-                    isSidebarCollapsed ? 'md:justify-center md:px-0 md:py-3' : 'md:justify-start md:px-3',
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors group relative',
+                    isSidebarCollapsed ? 'justify-center px-2' : '',
                     isActive
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
                   )}
-                  title={t(item.label)}
                 >
-                  {/* Icon with badge dot in collapsed mode */}
+                  {/* Icon */}
                   <div className="relative shrink-0">
-                    <Icon
-                      className={cn(
-                        'h-5 w-5',
-                        isActive
-                          ? 'text-white'
-                          : 'text-slate-400 group-hover:text-emerald-600'
-                      )}
-                    />
-                    {/* Collapsed sidebar: show dot badge on icon */}
+                    <Icon className={cn('h-5 w-5', isActive ? 'text-white' : 'text-slate-400 group-hover:text-emerald-600')} />
+                    {/* Dot badge when collapsed */}
                     {showBadge && isSidebarCollapsed && (
                       <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white dark:border-slate-900 animate-pulse" />
                     )}
                   </div>
 
-                  {/* Label (hidden when collapsed) */}
-                  <div className={cn("flex-1 min-w-0", isSidebarCollapsed ? "md:hidden" : "")}>
-                    <p className="font-medium truncate">{t(item.label)}</p>
-                  </div>
+                  {/* Label — fades out when collapsing */}
+                  <AnimatePresence initial={false}>
+                    {!isSidebarCollapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: 'auto' }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="flex-1 font-medium truncate overflow-hidden whitespace-nowrap"
+                      >
+                        {t(item.label)}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
 
-                  {/* Badge count in expanded mode (replaces chevron for negotiations) */}
-                  {showBadge && !isSidebarCollapsed ? (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className={cn(
-                        "ml-auto min-w-5 h-5 px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
-                        isActive
-                          ? "bg-white/30 text-white"
-                          : "bg-red-500 text-white animate-pulse"
-                      )}
-                    >
-                      {pendingNegotiationCount > 9 ? '9+' : badgeCount}
-                    </motion.span>
-                  ) : (
-                    isActive && (
-                      <ChevronRight className={cn("h-3 w-3 text-emerald-200 shrink-0 ml-auto", isSidebarCollapsed ? "md:hidden" : "")} />
-                    )
+                  {/* Badge / chevron in expanded mode */}
+                  {!isSidebarCollapsed && (
+                    showBadge ? (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className={cn(
+                          'ml-auto min-w-5 h-5 px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0',
+                          isActive ? 'bg-white/30 text-white' : 'bg-red-500 text-white animate-pulse'
+                        )}
+                      >
+                        {badgeCount > 9 ? '9+' : badgeCount}
+                      </motion.span>
+                    ) : isActive ? (
+                      <ChevronRight className="h-3 w-3 text-emerald-200 shrink-0 ml-auto" />
+                    ) : null
                   )}
                 </motion.div>
               </Link>
@@ -310,20 +250,64 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Logout button */}
-        <div className="border-t border-slate-100 dark:border-slate-800 p-3 md:flex md:justify-center md:p-2">
-          <button
+        {/* ── Logout ──────────────────────────────────────────────────────── */}
+        <div className={cn(
+          'border-t border-slate-100 dark:border-slate-800 p-2 shrink-0',
+          isSidebarCollapsed ? 'flex justify-center' : ''
+        )}>
+          <motion.button
             onClick={handleLogout}
-            className={cn(
-              'w-full rounded-lg px-3 py-2 text-left text-sm text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors',
-              isSidebarCollapsed ? 'md:rounded-full md:p-2 md:flex md:justify-center' : 'md:rounded-lg md:px-3 md:py-2 md:text-left'
-            )}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
             title="Sign out"
+            className={cn(
+              'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-slate-500 dark:text-slate-400',
+              'hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors group',
+              isSidebarCollapsed ? 'justify-center px-2' : 'w-full'
+            )}
           >
-            <span className={cn(isSidebarCollapsed ? "md:hidden" : "")}>Sign out</span>
-            <span className={cn("md:text-xs md:font-bold", !isSidebarCollapsed ? "md:hidden" : "")}>←</span>
-          </button>
+            <LogOut className="h-5 w-5 shrink-0 group-hover:text-red-500 transition-colors" />
+            <AnimatePresence initial={false}>
+              {!isSidebarCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="overflow-hidden whitespace-nowrap font-medium"
+                >
+                  Sign out
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
         </div>
+
+        {/* ── Floating collapse toggle — sits on the RIGHT EDGE of sidebar ── */}
+        {/* Desktop only */}
+        <motion.button
+          onClick={toggleSidebarCollapse}
+          className={cn(
+            'hidden md:flex',
+            'absolute -right-3.5 top-1/2 -translate-y-1/2 z-50',
+            'h-7 w-7 items-center justify-center rounded-full',
+            'bg-white dark:bg-slate-800',
+            'border border-slate-200 dark:border-slate-700',
+            'text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400',
+            'shadow-md hover:shadow-emerald-500/20 dark:hover:shadow-emerald-400/20',
+            'hover:border-emerald-400 dark:hover:border-emerald-500',
+            'transition-all duration-200 hover:scale-110',
+          )}
+          title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          whileTap={{ scale: 0.9 }}
+        >
+          <motion.div
+            animate={{ rotate: isSidebarCollapsed ? 180 : 0 }}
+            transition={{ duration: 0.3, type: 'spring', stiffness: 200, damping: 20 }}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </motion.div>
+        </motion.button>
       </motion.aside>
     </>
   );

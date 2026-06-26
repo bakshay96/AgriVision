@@ -144,6 +144,9 @@ export const marketPricesApi = {
   getAll: (params?: Record<string, unknown>) => api.get('/market-prices', { params }),
   getTrends: (cropName: string) => api.get(`/market-prices/trends/${cropName}`),
   getNearby: (params?: Record<string, unknown>) => api.get('/market-prices/nearby', { params }),
+  // Fetches districts for a state, or talukas when district param is also passed
+  getDistricts: (state: string, district?: string) =>
+    api.get('/market-prices/districts', { params: { state, ...(district ? { district } : {}) } }),
 };
 
 // ─── Crop Encyclopedia ───────────────────────────────────────────────────────
@@ -155,6 +158,9 @@ export const cropEncyclopediaApi = {
   getPestsAndDiseases: (id: string) => api.get(`/crop-encyclopedia/${id}/pests-diseases`),
   getAdvice: (id: string, question: string) =>
     api.post(`/crop-encyclopedia/${id}/advice`, { question }),
+  // Server-side AI search proxy — Gemini key stays on server, never in browser
+  aiSearch: (cropName: string, language: string = 'en') =>
+    api.post('/crop-encyclopedia/ai-search', { cropName, language }),
 };
 
 // ─── Financial ─────────────────────────────────────────────────────────────────
@@ -210,6 +216,12 @@ export const uploadApi = {
   
   // Delete uploaded image
   deleteImage: (id: string) => api.delete(`/upload/${id}`),
+};
+
+// ─── Feedback ───────────────────────────────────────────────────────────────
+export const feedbackApi = {
+  create: (data: Record<string, unknown>) => api.post('/feedback', data),
+  getAll: () => api.get('/feedback'),
 };
 
 // ─── User Profile & Crops ───────────────────────────────────────────────────

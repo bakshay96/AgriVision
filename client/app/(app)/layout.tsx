@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/navigation/Sidebar';
 import Navbar from '@/components/navigation/Navbar';
+import MobileBottomNav from '@/components/navigation/MobileBottomNav';
 import { useAppStore } from '@/store/useAppStore';
 import { useSocket } from '@/hooks/useSocket';
 import FloatingChatContainer from '@/components/chat/FloatingChatContainer';
@@ -63,10 +64,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Navbar />
-        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+        <main className="flex-1 overflow-y-auto px-4 py-6 pb-20 sm:px-6 lg:px-8 md:pb-6">
           {children}
         </main>
       </div>
+      {/* Mobile bottom navigation (visible on small screens only) */}
+      <MobileBottomNav />
       {/* Floating Chat Container - renders all active chat widgets */}
       <FloatingChatContainer />
       

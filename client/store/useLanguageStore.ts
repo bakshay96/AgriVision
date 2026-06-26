@@ -24,6 +24,8 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.encyclopedia': 'Crop Encyclopedia',
     'nav.financial': 'Financial',
     'nav.profile': 'My Profile',
+    'nav.feedback': 'Feedback',
+    'nav.chat': 'B2B Chat',
     
     // Dashboard
     'dash.welcome': 'Welcome',
@@ -196,6 +198,8 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.encyclopedia': 'पीक माहिती',
     'nav.financial': 'आर्थिक',
     'nav.profile': 'माझे प्रोफाइल',
+    'nav.feedback': 'अभिप्राय',
+    'nav.chat': 'बी2बी चॅट',
     
     // Dashboard
     'dash.welcome': 'स्वागत आहे',
@@ -368,6 +372,8 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.encyclopedia': 'फसल ज्ञानकोश',
     'nav.financial': 'वित्तीय',
     'nav.profile': 'मेरी प्रोफाइल',
+    'nav.feedback': 'प्रतिक्रिया',
+    'nav.chat': 'बी2बी चैट',
     
     // Dashboard
     'dash.welcome': 'स्वागत है',
