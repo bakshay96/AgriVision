@@ -1,1 +1,1 @@
-{"version":3,"file":"marketPriceController.d.ts","sourceRoot":"","sources":["../../src/controllers/marketPriceController.ts"],"names":[],"mappings":"AAaA,eAAO,MAAM,eAAe,8IA+D1B,CAAC;AAGH,eAAO,MAAM,cAAc,8IAiBzB,CAAC;AAGH,eAAO,MAAM,gBAAgB,8IA8C3B,CAAC"}
+{"version":3,"file":"marketPriceController.d.ts","sourceRoot":"","sources":["../../src/controllers/marketPriceController.ts"],"names":[],"mappings":"AAYA,eAAO,MAAM,eAAe,8IAgE1B,CAAC;AAGH,eAAO,MAAM,oBAAoB,8IAqC/B,CAAC;AAGH,eAAO,MAAM,cAAc,8IAiBzB,CAAC;AAGH,eAAO,MAAM,gBAAgB,8IAwC3B,CAAC"}

@@ -18,12 +18,22 @@ const upload = (0, multer_1.default)({
         files: 5, // Max 5 files for multiple upload
     },
     fileFilter: (_req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
+        const allowedTypes = [
+            // Images
+            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+            // Audio
+            'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/m4a', 'audio/x-m4a', 'audio/mp4', 'audio/aac', 'audio/3gpp',
+            // Video
+            'video/mp4', 'video/quicktime', 'video/webm', 'video/ogg', 'video/x-matroska', 'video/avi', 'video/3gpp',
+            // Documents
+            'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ];
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         }
         else {
-            cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${allowedTypes.join(', ')}`));
+            cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: images, audio, video, pdf, doc, xls.`));
         }
     },
 });

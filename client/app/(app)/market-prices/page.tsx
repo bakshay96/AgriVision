@@ -359,7 +359,7 @@ export default function MarketPricesPage() {
               )}
               <button 
                 onClick={() => { setSearch(""); setSelectedState(""); setSelectedDistrict(""); setSelectedTaluka(""); setSelectedCrop(""); setFromDate(""); setToDate(""); }}
-                className="text-red-500 hover:text-red-650 transition-colors ml-auto hover:underline font-bold text-[10px]"
+                className="text-red-500 hover:text-red-600 transition-colors ml-auto hover:underline font-bold text-[10px]"
               >
                 Clear All
               </button>
@@ -464,11 +464,11 @@ export default function MarketPricesPage() {
                     <div className="grid grid-cols-3 gap-2 pt-1">
                       <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-center">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Min Price</p>
-                        <p className="text-xs font-bold text-slate-650 dark:text-slate-350 mt-0.5">{formatCurrency(p.price?.min)}</p>
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-350 mt-0.5">{formatCurrency(p.price?.min)}</p>
                       </div>
                       <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-center">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Max Price</p>
-                        <p className="text-xs font-bold text-slate-650 dark:text-slate-350 mt-0.5">{formatCurrency(p.price?.max)}</p>
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-350 mt-0.5">{formatCurrency(p.price?.max)}</p>
                       </div>
                       <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 text-center">
                         <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Modal Avg</p>
