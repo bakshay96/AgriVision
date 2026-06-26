@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import Order from '../models/Order';
 import Inventory from '../models/Inventory';
@@ -7,6 +8,8 @@ import Notification from '../models/Notification';
 import Feedback from '../models/Feedback';
 import Negotiation from '../models/Negotiation';
 import { AuthRequest } from '../middleware/auth';
+import { emitSystemNotification } from '../services/socketService';
+
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 const sendError = (res: Response, status: number, message: string, err?: unknown) => {
@@ -209,6 +212,51 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ─── POST /api/admin/users (Create) ──────────────────────────────────────────
+export const createUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, email, password, role, state, district, farmName, phoneNumber, isActive } = req.body;
+
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ success: false, message: 'name, email, password, and role are required' });
+    }
+    if (!['FARMER', 'BUYER', 'ADMIN'].includes(role)) {
+      return res.status(400).json({ success: false, message: 'Invalid role' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const exists = await User.findOne({ email: email.toLowerCase().trim() });
+    if (exists) return res.status(409).json({ success: false, message: 'A user with this email already exists' });
+
+    const hashed = await bcrypt.hash(password, 12);
+    // Use a placeholder tenantId (same as email slug) — adjust if your model requires it
+    const tenantId = email.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30);
+
+    const user = await User.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: hashed,
+      role,
+      state: state || undefined,
+      district: district || undefined,
+      farmName: farmName || undefined,
+      phoneNumber: phoneNumber || undefined,
+      isActive: isActive !== undefined ? isActive : true,
+      tenantId,
+      updatedBy: req.user?._id,
+      updatedAt: new Date(),
+    });
+
+    const userObj = user.toObject() as unknown as Record<string, unknown>;
+    delete userObj.password;
+    res.status(201).json({ success: true, message: 'User created successfully', data: userObj });
+  } catch (err) {
+    sendError(res, 500, 'Failed to create user', err);
+  }
+};
+
 // ─── PUT /api/admin/users/:id ─────────────────────────────────────────────────
 export const updateUser = async (req: AuthRequest, res: Response) => {
   try {
@@ -230,17 +278,47 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid role value' });
     }
 
+    // Track who changed this user
+    updateData.updatedBy = req.user?._id;
+    updateData.updatedAt = new Date();
+
     const user = await User.findByIdAndUpdate(
       id,
       { $set: updateData },
       { new: true, runValidators: true }
-    ).select('-password');
+    ).select('-password').populate('updatedBy', 'name email');
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     res.json({ success: true, message: 'User updated successfully', data: user });
   } catch (err) {
     sendError(res, 500, 'Failed to update user', err);
+  }
+};
+
+// ─── PUT /api/admin/users/:id/password ───────────────────────────────────────
+export const changeUserPassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const hashed = await bcrypt.hash(password, 12);
+    const user = await User.findByIdAndUpdate(
+      id,
+      { $set: { password: hashed, updatedBy: req.user?._id, updatedAt: new Date() } },
+      { new: true }
+    ).select('-password');
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    sendError(res, 500, 'Failed to change password', err);
   }
 };
 
@@ -338,6 +416,18 @@ export const broadcastNotification = async (req: AuthRequest, res: Response) => 
 
     await Notification.insertMany(docs, { ordered: false });
 
+    // Emit live socket event to all target users
+    targetUsers.forEach((u) => {
+      try {
+        emitSystemNotification(u._id.toString(), {
+          message: message.trim(),
+          type,
+        });
+      } catch (err) {
+        console.error(`[AdminController] Failed to emit socket to user ${u._id}:`, err);
+      }
+    });
+
     res.json({
       success: true,
       message: `Notification sent to ${docs.length} user(s)`,
@@ -423,6 +513,49 @@ export const deleteFeedback = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, message: 'Feedback deleted' });
   } catch (err) {
     sendError(res, 500, 'Failed to delete feedback', err);
+  }
+};
+
+// ─── POST /api/admin/feedback/:id/reply ──────────────────────────────────────
+// Saves an admin reply on the feedback doc and sends a system notification
+export const replyToFeedback = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid feedback ID' });
+    }
+    const { reply } = req.body;
+    if (!reply || typeof reply !== 'string' || !reply.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply message is required' });
+    }
+
+    const feedback = await Feedback.findByIdAndUpdate(
+      id,
+      { $set: { adminReply: reply.trim(), repliedAt: new Date(), repliedBy: req.user?._id } },
+      { new: true }
+    ).populate('userId', '_id name email');
+
+    if (!feedback) return res.status(404).json({ success: false, message: 'Feedback not found' });
+
+    // If the feedback belongs to a registered user, send them a notification
+    const targetUser = feedback.userId as unknown as { _id: mongoose.Types.ObjectId; name: string; email: string } | null;
+    if (targetUser?._id) {
+      await Notification.create({
+        tenantId: targetUser._id.toString(),
+        userId: targetUser._id,
+        type: 'SYSTEM',
+        message: `Thank you for your feedback! We have reviewed your submission and want you to know we truly appreciate your input. Our team will consider your ideas to improve AgriVision for you.`,
+        isRead: false,
+      });
+      emitSystemNotification(targetUser._id.toString(), {
+        type: 'SYSTEM',
+        message: `Thanks for your feedback! We appreciate your input and will use it to improve AgriVision.`,
+      });
+    }
+
+    res.json({ success: true, message: 'Reply sent successfully', data: feedback });
+  } catch (err) {
+    sendError(res, 500, 'Failed to reply to feedback', err);
   }
 };
 

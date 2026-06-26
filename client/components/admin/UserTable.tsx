@@ -9,12 +9,12 @@ import {
   ChevronRight,
   Search,
   Filter,
-  User,
   UserCheck,
   UserX,
   MoreHorizontal,
   Pencil,
   Trash2,
+  Key,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -29,6 +29,8 @@ export interface AdminUser {
   createdAt: string;
   lastLogin?: string;
   farmName?: string;
+  updatedBy?: { name: string; email: string } | null;
+  updatedAt?: string;
 }
 
 interface UserTableProps {
@@ -49,6 +51,7 @@ interface UserTableProps {
   sortOrder: 'asc' | 'desc';
   onEdit: (user: AdminUser) => void;
   onDelete: (user: AdminUser) => void;
+  onChangePassword?: (user: AdminUser) => void;
 }
 
 const roleStyles: Record<string, string> = {
@@ -68,10 +71,10 @@ function SortIcon({ field, current, order }: { field: string; current: string; o
 
 export default function UserTable({
   users, total, page, totalPages, isLoading,
-  search, roleFilter, statusFilter,
-  onSearchChange, onRoleChange, onStatusChange,
+  search, statusFilter,
+  onSearchChange, onStatusChange,
   onPageChange, onSort, sortField, sortOrder,
-  onEdit, onDelete,
+  onEdit, onDelete, onChangePassword,
 }: UserTableProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
@@ -94,39 +97,144 @@ export default function UserTable({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search name or email…"
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-800 placeholder-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           />
         </div>
 
         <div className="flex items-center gap-1.5">
           <Filter className="h-3.5 w-3.5 text-slate-400" />
           <select
-            value={roleFilter}
-            onChange={(e) => onRoleChange(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white py-2 pl-2 pr-6 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            value={statusFilter}
+            onChange={(e) => onStatusChange(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white py-2 pl-2 pr-6 text-sm text-slate-700 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           >
-            <option value="">All Roles</option>
-            <option value="FARMER">Farmer</option>
-            <option value="BUYER">Buyer</option>
-            <option value="ADMIN">Admin</option>
+            <option value="">All Status</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
           </select>
         </div>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => onStatusChange(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white py-2 pl-2 pr-6 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-        >
-          <option value="">All Status</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
 
         <span className="ml-auto text-xs text-slate-400">{total.toLocaleString()} users</span>
       </div>
 
+      {/* Mobile Card-based UI */}
+      <div className="grid gap-3 md:hidden">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-1/3 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                  <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                </div>
+              </div>
+              <div className="h-3 w-1/4 rounded bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            </div>
+          ))
+        ) : users.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-slate-400 text-sm">
+            No users found
+          </div>
+        ) : (
+          users.map((u) => (
+            <motion.div
+              key={u._id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-sm hover:border-amber-400/50 transition-colors"
+            >
+              {/* Card Header: Avatar & Profile */}
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 text-white text-xs font-bold shadow-sm">
+                    {u.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-800 dark:text-white text-sm">{u.name}</p>
+                    <p className="truncate text-xs text-slate-400">{u.email}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider', roleStyles[u.role] || 'bg-slate-100 text-slate-600')}>
+                    {u.role}
+                  </span>
+                  <span className={cn(
+                    'flex items-center gap-1 text-[10px] font-bold',
+                    u.isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-500 dark:text-red-400'
+                  )}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', u.isActive ? 'bg-indigo-500' : 'bg-red-500')} />
+                    {u.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card details */}
+              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-50 dark:border-slate-800/60 pt-3 text-slate-500 dark:text-slate-400">
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">State</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">{u.state || '—'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Farm Name</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">{u.farmName || '—'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Last Login</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">
+                    {u.lastLogin ? format(new Date(u.lastLogin), 'MMM d, yyyy') : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider">Joined</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">
+                    {format(new Date(u.createdAt), 'MMM d, yyyy')}
+                  </span>
+                </div>
+              </div>
+
+              {u.updatedBy && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/5 rounded px-2 py-1 flex items-center gap-1">
+                  <span>✎ Edited by {u.updatedBy.name}</span>
+                </p>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 border-t border-slate-50 dark:border-slate-800/60 pt-3 justify-end">
+                <button
+                  onClick={() => onEdit(u)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+                {onChangePassword && (
+                  <button
+                    onClick={() => onChangePassword(u)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <Key className="h-3 w-3" /> Password
+                  </button>
+                )}
+                <button
+                  onClick={() => onDelete(u)}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold border transition-colors',
+                    u.isActive
+                      ? 'border-red-100 bg-red-50 text-red-600 dark:bg-red-950/20 dark:border-red-900/30'
+                      : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-300'
+                  )}
+                >
+                  <Trash2 className="h-3 w-3" /> {u.isActive ? 'Deactivate' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/50">
@@ -175,12 +283,17 @@ export default function UserTable({
                   {/* User */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 via-purple-500 to-pink-500 text-white text-xs font-bold">
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 text-white text-xs font-bold">
                         {u.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-800 dark:text-white">{u.name}</p>
+                        <p className="truncate font-semibold text-slate-800 dark:text-white text-sm">{u.name}</p>
                         <p className="truncate text-xs text-slate-400">{u.email}</p>
+                        {u.updatedBy && (
+                          <p className="truncate text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                            ✎ Edited by {u.updatedBy.name}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -235,7 +348,7 @@ export default function UserTable({
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: -4 }}
                             transition={{ duration: 0.12 }}
-                            className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden"
+                            className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 overflow-hidden"
                           >
                             <button
                               onClick={() => { onEdit(u); setOpenMenu(null); }}
@@ -244,6 +357,16 @@ export default function UserTable({
                               <Pencil className="h-3.5 w-3.5" />
                               Edit User
                             </button>
+                            {onChangePassword && (
+                              <button
+                                onClick={() => { onChangePassword(u); setOpenMenu(null); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+                              >
+                                <Key className="h-3.5 w-3.5" />
+                                Change Password
+                              </button>
+                            )}
+                            <div className="border-t border-slate-100 dark:border-slate-800" />
                             <button
                               onClick={() => { onDelete(u); setOpenMenu(null); }}
                               className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"

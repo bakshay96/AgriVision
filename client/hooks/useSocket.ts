@@ -83,6 +83,7 @@ export const useSocket = () => {
         incrementOrderBadge.current();
       }
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['user', 'notifications'] });
     };
 
     const handleOrderUpdate = (data: { payload: Record<string, unknown>; timestamp: string }) => {
@@ -92,6 +93,7 @@ export const useSocket = () => {
       toast.success(msg, { icon: '📦' });
       // Invalidate ALL orders-related query keys so every component stays fresh
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['user', 'notifications'] });
     };
 
     const handleNewMessage = (data: { payload: Record<string, unknown>; timestamp: string }) => {
@@ -184,6 +186,7 @@ export const useSocket = () => {
       const msg = String(data.payload.message || 'Crop health alert!');
       addNotification({ type: 'CROP_ALERT', message: msg, payload: data.payload, timestamp: data.timestamp });
       toast.error(msg, { duration: 8000 });
+      queryClient.invalidateQueries({ queryKey: ['user', 'notifications'] });
     };
 
     const handleAIComplete = (data: { payload: Record<string, unknown>; timestamp: string }) => {
@@ -191,6 +194,7 @@ export const useSocket = () => {
       const msg = `AI Analysis done: ${payload.disease} detected (${payload.confidence}% confidence)`;
       addNotification({ type: 'AI_ANALYSIS_COMPLETE', message: msg, payload, timestamp: data.timestamp });
       toast.success(msg, { icon: '🤖' });
+      queryClient.invalidateQueries({ queryKey: ['user', 'notifications'] });
     };
 
     const handleNegotiationUpdate = (data: { payload: Record<string, unknown>; timestamp: string }) => {
@@ -224,6 +228,15 @@ export const useSocket = () => {
         addNotification({ type: 'ORDER_STATUS_UPDATE', message: msg, payload, timestamp: data.timestamp });
         toast.error(msg, { icon: '❌' });
       }
+      queryClient.invalidateQueries({ queryKey: ['user', 'notifications'] });
+    };
+
+    const handleSystemNotification = (data: { type: string; payload: Record<string, unknown>; timestamp: string }) => {
+      const { payload, type } = data;
+      const msg = String(payload.message || 'System Notification');
+      addNotification({ type: 'SYSTEM', message: msg, payload, timestamp: data.timestamp });
+      toast.info(msg, { icon: '🔔', duration: 8000 });
+      queryClient.invalidateQueries({ queryKey: ['user', 'notifications'] });
     };
 
     socket.on('new_order',           handleNewOrder);
@@ -232,6 +245,7 @@ export const useSocket = () => {
     socket.on('crop_alert',          handleCropAlert);
     socket.on('ai_analysis_complete', handleAIComplete);
     socket.on('negotiation_update',  handleNegotiationUpdate);
+    socket.on('system_notification', handleSystemNotification);
 
     return () => {
       socket.off('new_order',           handleNewOrder);
@@ -240,6 +254,7 @@ export const useSocket = () => {
       socket.off('crop_alert',          handleCropAlert);
       socket.off('ai_analysis_complete', handleAIComplete);
       socket.off('negotiation_update',  handleNegotiationUpdate);
+      socket.off('system_notification', handleSystemNotification);
     };
 
   // ⚠️ Intentionally excludes `sessions` and chat store methods from deps.

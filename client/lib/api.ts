@@ -235,6 +235,11 @@ export const userApi = {
   addSelectedCrop: (cropName: string) => api.post('/user/crops', { cropName }),
   removeSelectedCrop: (cropName: string) => api.delete(`/user/crops/${encodeURIComponent(cropName)}`),
   updateSelectedCrops: (crops: string[]) => api.put('/user/crops', { crops }),
+  
+  // Notifications
+  getNotifications: () => api.get('/user/notifications'),
+  markAllNotificationsRead: () => api.put('/user/notifications/read'),
+  markNotificationRead: (id: string) => api.put(`/user/notifications/${id}/read`),
 };
 
 export default api;

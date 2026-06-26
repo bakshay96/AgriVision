@@ -149,3 +149,16 @@ export const emitNegotiationUpdate = (
   getIO().to(`user:${farmerId}`).emit('negotiation_update', payload);
   console.log(`[Socket] Emitted negotiation_update to buyer:${buyerId} and farmer:${farmerId}`);
 };
+
+/** Notify a specific user of a system/broadcast notification */
+export const emitSystemNotification = (
+  userId: string,
+  notificationData: Record<string, unknown>
+): void => {
+  getIO().to(`user:${userId}`).emit('system_notification', {
+    type: notificationData.type || 'SYSTEM',
+    payload: notificationData,
+    timestamp: new Date().toISOString(),
+  });
+};
+

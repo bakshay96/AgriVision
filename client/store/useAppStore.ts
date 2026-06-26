@@ -23,7 +23,7 @@ export interface User {
 
 export interface OrderNotification {
   id: string;
-  type: 'NEW_ORDER' | 'ORDER_STATUS_UPDATE' | 'NEW_MESSAGE' | 'CROP_ALERT' | 'AI_ANALYSIS_COMPLETE';
+  type: 'NEW_ORDER' | 'ORDER_STATUS_UPDATE' | 'NEW_MESSAGE' | 'CROP_ALERT' | 'AI_ANALYSIS_COMPLETE' | 'SYSTEM';
   message: string;
   payload: Record<string, unknown>;
   timestamp: string;

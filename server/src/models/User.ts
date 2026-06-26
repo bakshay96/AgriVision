@@ -44,6 +44,7 @@ export interface IUser extends Document {
     ifscCode?: string;
     bankName?: string;
   };
+  updatedBy?: mongoose.Types.ObjectId | null;
   // Instance method
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -105,6 +106,7 @@ const UserSchema = new Schema<IUser>(
       ifscCode: { type: String, trim: true, match: /^[A-Z]{4}0[A-Z0-9]{6}$/ },
       bankName: { type: String, trim: true },
     },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   {
     timestamps: true,
