@@ -513,7 +513,7 @@ export default function OrderChat({
                                 )}
                               >
                                 {imageErrors.has(imgUrl) ? (
-                                  <div className="h-32 flex items-center justify-center bg-slate-200 dark:bg-slate-650 rounded-lg">
+                                  <div className="h-32 flex items-center justify-center bg-slate-200 dark:bg-slate-700 rounded-lg">
                                     <div className="text-center">
                                       <ImageIcon className="h-8 w-8 mx-auto text-slate-400 dark:text-slate-500 mb-1" />
                                       <span className="text-xs text-slate-500 dark:text-slate-400">Image unavailable</span>
@@ -721,7 +721,7 @@ export default function OrderChat({
                             <button
                               key={emoji}
                               onClick={() => addEmoji(emoji)}
-                              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-650 rounded-lg text-xl transition-colors"
+                              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-xl transition-colors"
                             >
                               {emoji}
                             </button>

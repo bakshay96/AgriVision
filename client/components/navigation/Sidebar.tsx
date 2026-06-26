@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Microscope, ShoppingCart, Package,
   Leaf, X, ChevronRight, ShoppingBag, Cloud, TrendingUp,
   BookOpen, Wallet, User, Handshake, MessageSquare, MessageCircle,
-  ChevronLeft, LogOut,
+  ChevronLeft, LogOut, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
@@ -253,8 +253,35 @@ export default function Sidebar() {
         {/* ── Logout ──────────────────────────────────────────────────────── */}
         <div className={cn(
           'border-t border-slate-100 dark:border-slate-800 p-2 shrink-0',
-          isSidebarCollapsed ? 'flex justify-center' : ''
+          isSidebarCollapsed ? 'flex flex-col items-center gap-1' : 'space-y-1'
         )}>
+          {/* Admin Panel Link — ADMIN role only */}
+          {user?.role?.toUpperCase() === 'ADMIN' && (
+            <Link
+              href="/admin/dashboard"
+              title={isSidebarCollapsed ? 'Admin Panel' : undefined}
+              className={cn(
+                'flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-violet-600 dark:text-violet-400',
+                'hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors group',
+                isSidebarCollapsed ? 'justify-center px-2' : 'w-full'
+              )}
+            >
+              <Shield className="h-4 w-4 shrink-0" />
+              <AnimatePresence initial={false}>
+                {!isSidebarCollapsed && (
+                  <motion.span
+                    initial={{ opacity: 0, width: 0 }}
+                    animate={{ opacity: 1, width: 'auto' }}
+                    exit={{ opacity: 0, width: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden whitespace-nowrap font-medium"
+                  >
+                    Admin Panel
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </Link>
+          )}
           <motion.button
             onClick={handleLogout}
             whileHover={{ scale: 1.02 }}

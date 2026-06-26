@@ -80,6 +80,22 @@
     background: linear-gradient(135deg, #047857 0%, #065f46 50%, #064e3b 100%);
   }
 
+  .master-admin-gradient {
+    background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #020617 100%);
+  }
+
+  .master-admin-glow {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.15);
+  }
+
+  .master-admin-glow-hover {
+    @apply transition-all duration-300;
+  }
+  .master-admin-glow-hover:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.4) !important;
+  }
+
   .card-hover {
     @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
   }

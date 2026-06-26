@@ -22,6 +22,7 @@ import financialRoutes from './routes/financial';
 import uploadRoutes from './routes/upload';
 import userRoutes from './routes/user';
 import feedbackRoutes from './routes/feedback';
+import adminRoutes from './routes/admin';
 import { getHomeInfo } from './controllers/homeController';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
@@ -123,6 +124,7 @@ app.use('/api/financial', financialRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ─── 404 & Error Handler ──────────────────────────────────────────────────────
 app.use(notFound);

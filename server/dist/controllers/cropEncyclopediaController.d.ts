@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
+export declare const aiSearchCrop: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getAllCrops: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getCropById: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const searchCrops: (req: AuthRequest, res: Response) => Promise<void>;
