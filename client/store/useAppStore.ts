@@ -78,7 +78,7 @@ export const useAppStore = create<AppState>()(
       unreadCount: 0,
 
       // UI state
-      isSidebarOpen: true,
+      isSidebarOpen: false,
       isSidebarCollapsed: false,
       isAnalyzing: false,
       uploadProgress: 0,

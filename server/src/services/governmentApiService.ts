@@ -16,6 +16,56 @@ export const ALL_INDIA_STATES = [
   'Daman & Diu', 'Delhi', 'Jammu & Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
 ].sort();
 
+interface CacheEntry {
+  timestamp: number;
+  prices: any[];
+}
+
+const priceCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+export const parseArrivalDate = (dateStr: string): Date | null => {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const cleaned = dateStr.trim();
+  
+  // Try YYYY-MM-DD or DD-MM-YYYY
+  if (cleaned.includes('-')) {
+    const parts = cleaned.split('-');
+    if (parts.length === 3) {
+      const p0 = Number(parts[0]);
+      const p1 = Number(parts[1]);
+      const p2 = Number(parts[2]);
+      if (p0 > 1000) {
+        return new Date(p0, p1 - 1, p2); // YYYY-MM-DD
+      } else {
+        return new Date(p2, p1 - 1, p0); // DD-MM-YYYY
+      }
+    }
+  }
+  
+  // Try DD/MM/YYYY or YYYY/MM/DD
+  if (cleaned.includes('/')) {
+    const parts = cleaned.split('/');
+    if (parts.length === 3) {
+      const p0 = Number(parts[0]);
+      const p1 = Number(parts[1]);
+      const p2 = Number(parts[2]);
+      if (p2 > 1000) {
+        return new Date(p2, p1 - 1, p0); // DD/MM/YYYY
+      } else if (p0 > 1000) {
+        return new Date(p0, p1 - 1, p2); // YYYY/MM/DD
+      }
+    }
+  }
+
+  // Fallback to standard parser
+  const parsed = new Date(cleaned);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  return null;
+};
+
 export const fetchAgmarknetPrices = async (
   state?: string,
   district?: string,
@@ -32,57 +82,80 @@ export const fetchAgmarknetPrices = async (
     if (district) url += `&filters[district]=${encodeURIComponent(district)}`;
     if (crop) url += `&filters[commodity]=${encodeURIComponent(crop)}`;
 
-    const response = await axios.get(url);
-    const records = response.data.records || [];
+    const cacheKey = url;
+    const now = Date.now();
+    const cached = priceCache.get(cacheKey);
 
-    let prices = records.map((record: any) => {
-      // Build dynamic unique crops and states mapping
-      if (!cropVarieties[record.commodity]) cropVarieties[record.commodity] = [];
-      if (!cropVarieties[record.commodity].includes(record.variety)) cropVarieties[record.commodity].push(record.variety);
-      
-      if (!stateMarkets[record.state]) stateMarkets[record.state] = [];
-      if (!stateMarkets[record.state].includes(record.district)) stateMarkets[record.state].push(record.district);
+    let prices: any[] = [];
 
-      return {
-        cropName: record.commodity,
-        variety: record.variety,
-        marketName: record.market,
-        marketLocation: {
-          state: record.state,
-          district: record.district,
-          taluka: '',
-        },
-        price: {
-          min: Number(record.min_price),
-          max: Number(record.max_price),
-          modal: Number(record.modal_price),
-          unit: 'per quintal',
-        },
-        arrivalDate: record.arrival_date, // DD/MM/YYYY
-        quantity: { value: 0, unit: 'quintals' },
-        grade: record.grade,
-        priceTrend: 'stable',
-        priceChangePercent: 0,
-        lastWeekAvgPrice: Number(record.modal_price),
-        lastMonthAvgPrice: Number(record.modal_price),
-        isOrganic: false,
-        source: 'Agmarknet/Government Data',
-        reportingDate: record.arrival_date,
-      };
-    });
+    if (cached && now - cached.timestamp < CACHE_TTL) {
+      console.log(`[Cache Hit] Serving Agmarknet prices for key: ${cacheKey}`);
+      // Return a copy so in-memory filters don't mutate cache source
+      prices = [...cached.prices];
+    } else {
+      console.log(`[Cache Miss] Fetching Agmarknet prices from API: ${url}`);
+      const response = await axios.get(url);
+      const records = response.data.records || [];
+
+      prices = records.map((record: any) => {
+        // Build dynamic unique crops and states mapping
+        if (!cropVarieties[record.commodity]) cropVarieties[record.commodity] = [];
+        if (!cropVarieties[record.commodity].includes(record.variety)) cropVarieties[record.commodity].push(record.variety);
+        
+        if (!stateMarkets[record.state]) stateMarkets[record.state] = [];
+        if (!stateMarkets[record.state].includes(record.district)) stateMarkets[record.state].push(record.district);
+
+        return {
+          cropName: record.commodity,
+          variety: record.variety,
+          marketName: record.market,
+          marketLocation: {
+            state: record.state,
+            district: record.district,
+            taluka: '',
+          },
+          price: {
+            min: Number(record.min_price),
+            max: Number(record.max_price),
+            modal: Number(record.modal_price),
+            unit: 'per quintal',
+          },
+          arrivalDate: record.arrival_date, // e.g. DD/MM/YYYY or YYYY-MM-DD
+          quantity: { value: 0, unit: 'quintals' },
+          grade: record.grade,
+          priceTrend: 'stable',
+          priceChangePercent: 0,
+          lastWeekAvgPrice: Number(record.modal_price),
+          lastMonthAvgPrice: Number(record.modal_price),
+          isOrganic: false,
+          source: 'Agmarknet/Government Data',
+          reportingDate: record.arrival_date,
+        };
+      });
+
+      priceCache.set(cacheKey, {
+        timestamp: now,
+        prices: [...prices],
+      });
+    }
 
     // In-memory date filtering
     if (fromDate || toDate) {
       prices = prices.filter((p: any) => {
-        const [day, month, year] = p.arrivalDate.split('/').map(Number);
-        const arrivalDate = new Date(year, month - 1, day);
+        const arrivalDate = parseArrivalDate(p.arrivalDate);
+        if (!arrivalDate) return false;
         
+        // Zero out time boundaries to compare calendar dates precisely
+        arrivalDate.setHours(0, 0, 0, 0);
+
         if (fromDate) {
           const from = new Date(fromDate);
+          from.setHours(0, 0, 0, 0);
           if (arrivalDate < from) return false;
         }
         if (toDate) {
           const to = new Date(toDate);
+          to.setHours(0, 0, 0, 0);
           if (arrivalDate > to) return false;
         }
         return true;

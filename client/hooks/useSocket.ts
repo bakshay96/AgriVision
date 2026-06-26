@@ -118,9 +118,38 @@ export const useSocket = () => {
         });
       }
 
+      const msgObj = {
+        _id: String(payload.messageId || ''),
+        senderId,
+        senderName,
+        senderRole,
+        message: fullMessage,
+        timestamp,
+      };
+
+      const updateCache = (oldData: any) => {
+        if (!oldData) return oldData;
+        const updateList = (list: any[]) => list.map((o: any) => {
+          if (o._id === orderId) {
+            const history = o.messageHistory || [];
+            const exists = history.some((m: any) => 
+              m._id === msgObj._id || 
+              (m.timestamp === msgObj.timestamp && (typeof m.senderId === 'string' ? m.senderId : m.senderId?._id) === msgObj.senderId)
+            );
+            if (exists) return o;
+            return { ...o, messageHistory: [...history, msgObj] };
+          }
+          return o;
+        });
+
+        if (Array.isArray(oldData)) return updateList(oldData);
+        if (oldData.orders) return { ...oldData, orders: updateList(oldData.orders) };
+        return oldData;
+      };
+
       // ── Do not count own messages as unread ────────────────────────────
       if (senderId && currentUserIdRef.current && senderId === currentUserIdRef.current) {
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
+        queryClient.setQueriesData({ queryKey: ['orders'] }, updateCache);
         return;
       }
 
@@ -148,7 +177,7 @@ export const useSocket = () => {
         action: { label: 'Reply', onClick: () => { window.location.href = '/orders'; } },
       });
 
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.setQueriesData({ queryKey: ['orders'] }, updateCache);
     };
 
     const handleCropAlert = (data: { payload: Record<string, unknown>; timestamp: string }) => {

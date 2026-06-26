@@ -28,7 +28,7 @@ const buttonVariants = cva(
         emerald:
           'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800',
         'emerald-outline':
-          'border border-emerald-600 text-emerald-700 bg-transparent hover:bg-emerald-50',
+          'border border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-transparent hover:bg-emerald-50 dark:hover:bg-emerald-950/30',
         amber:
           'bg-amber-500 text-white shadow-sm hover:bg-amber-600',
       },

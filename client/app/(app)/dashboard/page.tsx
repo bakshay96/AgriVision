@@ -147,16 +147,7 @@ export default function DashboardPage() {
                 ))}
           </motion.div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <motion.div variants={item} className="space-y-4">
-              <div className="flex items-center justify-between mb-3"><h2 className="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white"><Sprout className="h-5 w-5 text-emerald-500" />{t('dash.cropStatus')}</h2><span className="text-xs text-slate-400">{crops.length} {t('dash.active')}</span></div>
-              <div ref={scrollRef} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4 pb-2 w-full pl-1 scroll-smooth">
-                {cropsLoading ? Array(3).fill(0).map((_, i) => <div key={i} className="min-w-full snap-center shrink-0"><SkeletonCropCard /></div>) : crops.map((crop: any, i: number) => <div key={String(crop._id)} className="min-w-full snap-center shrink-0 px-[1px]"><CropStatusCard crop={crop} index={i} /></div>)}
-                {!cropsLoading && crops.length === 0 && <div className="min-w-full snap-center shrink-0 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-10 text-center"><Sprout className="mx-auto h-10 w-10 text-slate-300 opacity-50" /><p className="mt-3 text-sm text-slate-500">No crops yet</p></div>}
-              </div>
-            </motion.div>
-            <motion.div variants={item}><AutoSwapCropCards crops={crops} isLoading={cropsLoading} /></motion.div>
-          </div>
+
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <motion.div variants={item}><NegotiationsWidget isFarmer={user?.role === 'FARMER'} /></motion.div>
@@ -167,7 +158,34 @@ export default function DashboardPage() {
 
       {activeTab === 'weather' && <WeatherWidget crops={crops} />}
       {activeTab === 'marketPrices' && <div className="space-y-6"><DashboardMarketWidget /><div className="text-center"><Link href="/market-prices" className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors">View Full Market Prices<ArrowRight className="h-4 w-4" /></Link></div></div>}
-      {activeTab === 'encyclopedia' && <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"><div className="col-span-full text-center py-12"><p className="text-slate-500">Crop Encyclopedia content coming soon...</p><Link href="/crop-encyclopedia" className="mt-4 inline-block text-emerald-600 font-medium">Visit Encyclopedia →</Link></div></div>}
+      {activeTab === 'encyclopedia' && (
+        <motion.div variants={item} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-emerald-500" />
+              {t('dash.subnav.encyclopedia')}
+            </h2>
+            <Link href="/crop-encyclopedia" className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors">
+              View All <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {['Wheat', 'Rice', 'Soybean', 'Cotton', 'Maize', 'Tomato'].map((name) => (
+              <Link key={name} href="/crop-encyclopedia" className="group block rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                    <Sprout className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-white text-sm">{name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">View guide →</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 }

@@ -35,11 +35,13 @@ interface Order {
     totalPrice: number;
   }>;
   buyerId?: {
+    _id?: string;
     name: string;
     email: string;
     phoneNumber: string;
   };
   farmerId?: {
+    _id?: string;
     name: string;
     email: string;
     farmName: string;
@@ -47,10 +49,15 @@ interface Order {
     phoneNumber?: string;
   };
   shippingAddress: {
-    address: string;
+    street?: string;
+    address?: string;
     city: string;
     state: string;
-    pin: string;
+    pinCode?: string;
+    pin?: string;
+    district?: string;
+    taluka?: string;
+    country?: string;
   };
   deliveryDate?: string;
   trackingNumber?: string;
@@ -179,6 +186,7 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [activeView, setActiveView] = useState<'active' | 'delivered' | 'cancelled'>('active');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'sales' | 'purchases'>('all');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   
   // Confirm dialog state
@@ -208,10 +216,28 @@ export default function OrdersPage() {
 
   // Filter orders - show active orders by default
   const activeStatuses = ['pending', 'negotiating', 'deal_confirmed', 'ready_for_pickup', 'picked_up', 'in_transit'];
+  
+  const getOrderCategory = (order: Order) => {
+    const isSales = order.farmerId?._id === user?._id || 
+                    (typeof order.farmerId === 'string' && order.farmerId === user?._id) ||
+                    (userRole === 'FARMER' && order.buyerId?._id !== user?._id);
+    return isSales ? 'sales' : 'purchases';
+  };
+
+  const salesOrders = orders.filter(o => getOrderCategory(o) === 'sales');
+  const purchaseOrders = orders.filter(o => getOrderCategory(o) === 'purchases');
+
   const filteredByView = orders.filter(order => {
-    if (activeView === 'active') return activeStatuses.includes(order.status);
-    if (activeView === 'delivered') return order.status === 'delivered';
-    if (activeView === 'cancelled') return order.status === 'cancelled';
+    let matchesView = true;
+    if (activeView === 'active') matchesView = activeStatuses.includes(order.status);
+    else if (activeView === 'delivered') matchesView = order.status === 'delivered';
+    else if (activeView === 'cancelled') matchesView = order.status === 'cancelled';
+    
+    if (!matchesView) return false;
+
+    const category = getOrderCategory(order);
+    if (orderTypeFilter === 'sales') return category === 'sales';
+    if (orderTypeFilter === 'purchases') return category === 'purchases';
     return true;
   });
   
@@ -421,6 +447,45 @@ export default function OrdersPage() {
         </button>
       </div>
 
+      {/* Order Type Category Toggle */}
+      <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 max-w-lg">
+        <button
+          onClick={() => setOrderTypeFilter('all')}
+          className={cn(
+            "flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-all",
+            orderTypeFilter === 'all'
+              ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-slate-700"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+          )}
+        >
+          All Orders ({orders.length})
+        </button>
+        <button
+          onClick={() => setOrderTypeFilter('sales')}
+          className={cn(
+            "flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-all flex items-center justify-center gap-1.5",
+            orderTypeFilter === 'sales'
+              ? "bg-emerald-600 text-white shadow-sm"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+          )}
+        >
+          <span className={cn("w-1.5 h-1.5 rounded-full", orderTypeFilter === 'sales' ? "bg-white" : "bg-emerald-500")} />
+          Sales Orders ({salesOrders.length})
+        </button>
+        <button
+          onClick={() => setOrderTypeFilter('purchases')}
+          className={cn(
+            "flex-1 py-2 px-3 rounded-lg font-medium text-xs transition-all flex items-center justify-center gap-1.5",
+            orderTypeFilter === 'purchases'
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
+          )}
+        >
+          <span className={cn("w-1.5 h-1.5 rounded-full", orderTypeFilter === 'purchases' ? "bg-white" : "bg-blue-500")} />
+          Purchase Orders ({purchaseOrders.length})
+        </button>
+      </div>
+
       {/* Filters */}
       <Card className="dark:bg-slate-900 dark:border-slate-800">
         <CardContent className="p-4">
@@ -474,6 +539,11 @@ export default function OrdersPage() {
             const status = statusConfig[order.status];
             const StatusIcon = status.icon;
             const isExpanded = expandedOrder === order._id;
+            const category = getOrderCategory(order);
+            const isSalesOrder = category === 'sales';
+            const counterpartyName = isSalesOrder 
+              ? (order.buyerId?.name || 'Unknown Buyer') 
+              : (order.farmerId?.farmName || order.farmerId?.name || 'Unknown Seller');
             
             return (
               <motion.div
@@ -483,7 +553,12 @@ export default function OrdersPage() {
                 animate={{ opacity: 1 }}
               >
                 <Card 
-                  className="dark:bg-slate-900 dark:border-slate-800 cursor-pointer"
+                  className={cn(
+                    "dark:bg-slate-900 dark:border-slate-800 cursor-pointer border-l-4 transition-all duration-200 shadow-sm hover:shadow-md",
+                    isSalesOrder 
+                      ? "border-l-emerald-500 hover:border-l-emerald-600" 
+                      : "border-l-blue-500 hover:border-l-blue-600"
+                  )}
                   onClick={() => setExpandedOrder(isExpanded ? null : order._id)}
                 >
                   {/* Order Header */}
@@ -498,11 +573,16 @@ export default function OrdersPage() {
                             <h3 className="font-semibold text-slate-900 dark:text-white">
                               #{order.orderNumber}
                             </h3>
+                            <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border", isSalesOrder ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-500/20" : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-500/20")}>
+                              {isSalesOrder ? 'Sales' : 'Purchase'}
+                            </span>
                             <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", status.color)}>
                               {order.status}
                             </span>
                           </div>
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            {isSalesOrder ? `Buyer: ${counterpartyName}` : `Seller: ${counterpartyName}`}
+                            {' · '}
                             {new Date(order.createdAt).toLocaleDateString('en-IN')}
                           </p>
                         </div>
@@ -862,17 +942,33 @@ export default function OrdersPage() {
                                     {order.buyerId.phoneNumber}
                                   </p>
                                 )}
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 border-t pt-2">
-                                  {order.shippingAddress.address}<br />
-                                  {order.shippingAddress.city}, {order.shippingAddress.state}<br />
-                                  PIN: {order.shippingAddress.pin}
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 border-t pt-2 leading-relaxed">
+                                  {order.shippingAddress.street || order.shippingAddress.address || 'No Street Address'}
+                                  {(order.shippingAddress.taluka || order.shippingAddress.district) && (
+                                    <>
+                                      <br />
+                                      {order.shippingAddress.taluka ? `Taluka: ${order.shippingAddress.taluka}` : ''}
+                                      {order.shippingAddress.taluka && order.shippingAddress.district ? ', ' : ''}
+                                      {order.shippingAddress.district ? `Dist: ${order.shippingAddress.district}` : ''}
+                                    </>
+                                  )}
+                                  <br />
+                                  {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pinCode || order.shippingAddress.pin || ''}
                                 </p>
                               </div>
                             ) : (
-                              <p className="text-sm text-slate-600 dark:text-slate-300">
-                                {order.shippingAddress.address}<br />
-                                {order.shippingAddress.city}, {order.shippingAddress.state}<br />
-                                PIN: {order.shippingAddress.pin}
+                              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                {order.shippingAddress.street || order.shippingAddress.address || 'No Street Address'}
+                                {(order.shippingAddress.taluka || order.shippingAddress.district) && (
+                                  <>
+                                    <br />
+                                    {order.shippingAddress.taluka ? `Taluka: ${order.shippingAddress.taluka}` : ''}
+                                    {order.shippingAddress.taluka && order.shippingAddress.district ? ', ' : ''}
+                                    {order.shippingAddress.district ? `Dist: ${order.shippingAddress.district}` : ''}
+                                  </>
+                                )}
+                                <br />
+                                {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pinCode || order.shippingAddress.pin || ''}
                               </p>
                             )}
                           </div>
@@ -1053,6 +1149,7 @@ export default function OrdersPage() {
                             otherPartyName={userRole === 'FARMER' ? order.buyerId?.name : order.farmerId?.name}
                             otherPartyRole={userRole === 'FARMER' ? 'BUYER' : 'FARMER'}
                             isExpanded={true}
+                            className="h-[450px]"
                           />
                         </div>
                       </motion.div>

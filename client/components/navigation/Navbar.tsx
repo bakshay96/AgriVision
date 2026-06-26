@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Menu, Search, User, Image as ImageIcon, LogOut, MapPin, Clock, X, ChevronRight } from 'lucide-react';
+import { Bell, Menu, User, Image as ImageIcon, LogOut, MapPin, Clock, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -16,7 +16,6 @@ export default function Navbar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -39,7 +38,7 @@ export default function Navbar() {
   useEffect(() => setMounted(true), []);
 
   // Session Timeout Logic
-  const [sessionTimeLeft, setSessionTimeLeft] = useState(20 * 60);
+  const [sessionTimeLeft, setSessionTimeLeft] = useState(60 * 60);
   useEffect(() => {
     const storedSessionStart = localStorage.getItem('agrivision_session_start');
     const startTime = storedSessionStart ? parseInt(storedSessionStart) : Date.now();
@@ -64,7 +63,7 @@ export default function Navbar() {
 
     return () => clearInterval(timer);
   }, []);
-
+ 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -180,6 +179,20 @@ export default function Navbar() {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
+
+          {/* Language Selector */}
+          <div className="relative mr-2 flex items-center">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as any)}
+              className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold outline-none border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all shadow-sm"
+              title="Select language / भाषा निवडा / भाषा चुनें"
+            >
+              <option value="en" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">English (EN)</option>
+              <option value="hi" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">हिंदी (HI)</option>
+              <option value="mr" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-white">मराठी (MR)</option>
+            </select>
           </div>
 
           {/* User Profile */}

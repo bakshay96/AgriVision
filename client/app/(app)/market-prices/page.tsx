@@ -1,382 +1,541 @@
-'use client';
+"use client";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
+import { Search, ChevronUp, ChevronDown, Download, MessageSquare, Calendar as CalIcon, Filter, X, ArrowUpDown, SlidersHorizontal, Store, BarChart3, Loader2 } from "lucide-react";
+import { marketPricesApi, feedbackApi } from "@/lib/api";
+import { useAppStore } from "@/store/useAppStore";
+import { Card, CardContent } from "@/components/ui/card";
+import { useLanguageStore } from "@/store/useLanguageStore";
+import { useDebounce } from "@/hooks/useDebounce";
+import { formatCurrency } from "@/lib/utils";
+import PriceTicker from "@/components/market/PriceTicker";
+import { ALL_INDIA_STATES_CLIENT } from "@/lib/indiaStates";
+import { getDistrictsByState, getTalukasByDistrict } from "@/lib/indianLocations";
+import { toast } from "sonner";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
-import {
-  Search, ChevronUp, ChevronDown, Download, MessageSquare, 
-  Calendar as CalendarIcon, Filter, X, ArrowUpDown, Info, SlidersHorizontal, Store, BarChart3
-} from 'lucide-react';
-import { marketPricesApi, feedbackApi } from '@/lib/api';
-import { useAppStore } from '@/store/useAppStore';
-import { Card, CardContent } from '@/components/ui/card';
-import GlobalLoader from '@/components/ui/GlobalLoader';
-import { useLanguageStore } from '@/store/useLanguageStore';
-import { useDebounce } from '@/hooks/useDebounce';
-import { formatCurrency } from '@/lib/utils';
-import PriceTicker from '@/components/market/PriceTicker';
-import { toast } from 'sonner';
-
-type SortField = 'cropName' | 'variety' | 'priceMin' | 'priceMax' | 'priceModal' | 'marketName' | 'arrivalDate';
-type SortDirection = 'asc' | 'desc';
-interface SortConfig { field: SortField; direction: SortDirection; }
+type SortField = "cropName"|"variety"|"priceMin"|"priceMax"|"priceModal"|"marketName"|"arrivalDate";
+type SortDir = "asc"|"desc";
 
 export default function MarketPricesPage() {
   const { user } = useAppStore();
   const { t } = useLanguageStore();
-  const [search, setSearch] = useState('');
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedDistrict, setSelectedDistrict] = useState('');
-  const [selectedCrop, setSelectedCrop] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'priceModal', direction: 'desc' });
+  const [search, setSearch] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const [selectedDistrict, setSelectedDistrict] = useState("");
+  const [selectedTaluka, setSelectedTaluka] = useState("");
+  const [selectedCrop, setSelectedCrop] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [sort, setSort] = useState<{field:SortField;dir:SortDir}>({field:"priceModal",dir:"desc"});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSticky, setIsSticky] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isHeaderSticky, setIsHeaderSticky] = useState(false);
-  const [feedback, setFeedback] = useState({ subject: '', message: '', category: 'general' as const, rating: 5 });
-
+  const [fb, setFb] = useState({subject:"",message:"",category:"general" as const,rating:5});
   const headerRef = useRef<HTMLDivElement>(null);
-  const debouncedSearch = useDebounce(search, 300);
+  const debouncedSearch = useDebounce(search, 400);
 
-  // Scroll listener for sticky header
   useEffect(() => {
-    const handleScroll = () => {
-      if (headerRef.current) {
-        setIsHeaderSticky(window.scrollY > headerRef.current.offsetTop + 100);
-      }
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const onScroll = () => headerRef.current && setIsSticky(window.scrollY > headerRef.current.offsetTop + 80);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['market-prices', debouncedSearch, selectedState, selectedDistrict, selectedCrop, fromDate, toDate],
+  // ── Query 1: Prices (main data) ──────────────────────────────────────────
+  const { data: priceData, isFetching: pricesFetching, isLoading: pricesLoading } = useQuery({
+    queryKey: ["market-prices", debouncedSearch, selectedState, selectedDistrict, selectedTaluka, selectedCrop, fromDate, toDate],
     queryFn: () => marketPricesApi.getAll({
-      crop: selectedCrop || undefined,
-      state: selectedState || undefined,
-      district: selectedDistrict || undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined,
-      search: debouncedSearch || undefined,
-      limit: 500,
+      crop: selectedCrop||undefined, state: selectedState||undefined,
+      district: selectedDistrict||undefined, market: selectedTaluka||undefined,
+      fromDate: fromDate||undefined, toDate: toDate||undefined,
+      search: debouncedSearch||undefined, limit: 500,
     }).then(r => r.data.data),
     placeholderData: keepPreviousData,
   });
 
-  const { prices = [], crops = [], states = [], districts = [] } = data || {};
-
-  const stats = useMemo(() => {
-    if (!prices.length) return { avg: 0, total: 0, min: 0, max: 0 };
-    const modalPrices = prices.map((p: any) => p.price?.modal || 0);
-    return {
-      avg: Math.round(modalPrices.reduce((a: number, b: number) => a + b, 0) / prices.length),
-      total: prices.length,
-      min: Math.min(...modalPrices),
-      max: Math.max(...modalPrices),
-    };
-  }, [prices]);
-
-  const filteredAndSortedPrices = useMemo(() => {
-    let filtered = [...prices];
-    filtered.sort((a: any, b: any) => {
-      let aVal: any, bVal: any;
-      switch (sortConfig.field) {
-        case 'cropName': aVal = a.cropName; bVal = b.cropName; break;
-        case 'variety': aVal = a.variety; bVal = b.variety; break;
-        case 'priceMin': aVal = a.price?.min; bVal = b.price?.min; break;
-        case 'priceMax': aVal = a.price?.max; bVal = b.price?.max; break;
-        case 'priceModal': aVal = a.price?.modal; bVal = b.price?.modal; break;
-        case 'marketName': aVal = a.marketName; bVal = b.marketName; break;
-        case 'arrivalDate': 
-          const [d1, m1, y1] = a.arrivalDate.split('/').map(Number);
-          const [d2, m2, y2] = b.arrivalDate.split('/').map(Number);
-          aVal = new Date(y1, m1 - 1, d1).getTime();
-          bVal = new Date(y2, m2 - 1, d2).getTime();
-          break;
-        default: return 0;
-      }
-      if (typeof aVal === 'string') return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
-    });
-    return filtered;
-  }, [prices, sortConfig]);
-
-  const handleSort = useCallback((field: SortField) => {
-    setSortConfig(prev => ({
-      field,
-      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc',
-    }));
-  }, []);
-
-  const downloadCSV = () => {
-    const headers = ['Crop', 'Variety', 'Market', 'State', 'District', 'Min Price', 'Max Price', 'Modal Price', 'Date'];
-    const rows = filteredAndSortedPrices.map((p: any) => [
-      p.cropName, p.variety, p.marketName, p.marketLocation.state, p.marketLocation.district,
-      p.price.min, p.price.max, p.price.modal, p.arrivalDate
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `market_prices_${new Date().toISOString().split('T')[0]}.csv`);
-    link.click();
-  };
-
-  const feedbackMutation = useMutation({
-    mutationFn: (data: any) => feedbackApi.create(data),
-    onSuccess: () => {
-      toast.success('Thank you for your feedback!');
-      setShowFeedback(false);
-      setFeedback({ subject: '', message: '', category: 'general', rating: 5 });
-    },
-    onError: () => toast.error('Failed to submit feedback.'),
+  // ── Query 2: Districts for selected state ───────────────────────────────
+  const { data: districtData, isFetching: districtsFetching } = useQuery({
+    queryKey: ["market-districts", selectedState],
+    queryFn: () => marketPricesApi.getDistricts(selectedState).then(r => r.data.data),
+    enabled: !!selectedState,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
   });
 
-  if (isLoading && !data) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <GlobalLoader />
+  // ── Query 3: Talukas for selected district ──────────────────────────────
+  const { data: talukaData, isFetching: talukasFetching } = useQuery({
+    queryKey: ["market-talukas", selectedState, selectedDistrict],
+    queryFn: () => marketPricesApi.getDistricts(selectedState, selectedDistrict).then(r => r.data.data),
+    enabled: !!selectedState && !!selectedDistrict,
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { prices=[], crops=[], states=[] } = priceData || {};
+  
+  // Combine local and API-fetched districts (divisions)
+  const districtsOptions = useMemo(() => {
+    if (!selectedState) return [];
+    const localDistricts = getDistrictsByState(selectedState) || [];
+    const apiDistricts = districtData?.districts || [];
+    return Array.from(new Set([...localDistricts, ...apiDistricts])).sort();
+  }, [selectedState, districtData]);
+
+  // Combine local and API-fetched talukas (sub-divisions)
+  const talukasOptions = useMemo(() => {
+    if (!selectedDistrict) return [];
+    const localTalukas = getTalukasByDistrict(selectedState, selectedDistrict) || [];
+    const apiTalukas = talukaData?.talukas || [];
+    return Array.from(new Set([...localTalukas, ...apiTalukas])).sort();
+  }, [selectedState, selectedDistrict, talukaData]);
+
+  const stats = useMemo(() => {
+    if (!prices.length) return {avg:0,total:0,min:0,max:0};
+    const mp = prices.map((p:any) => p.price?.modal||0);
+    return { avg: Math.round(mp.reduce((a:number,b:number)=>a+b,0)/prices.length), total:prices.length, min:Math.min(...mp), max:Math.max(...mp) };
+  }, [prices]);
+
+  const sorted = useMemo(() => {
+    return [...prices].sort((a:any,b:any) => {
+      let av:any,bv:any;
+      switch(sort.field){
+        case "cropName": av=a.cropName; bv=b.cropName; break;
+        case "variety": av=a.variety; bv=b.variety; break;
+        case "priceMin": av=a.price?.min; bv=b.price?.min; break;
+        case "priceMax": av=a.price?.max; bv=b.price?.max; break;
+        case "priceModal": av=a.price?.modal; bv=b.price?.modal; break;
+        case "marketName": av=a.marketName; bv=b.marketName; break;
+        case "arrivalDate": {
+          const parseClientDate = (s: string) => {
+            if (!s) return 0;
+            // Handle YYYY-MM-DD
+            if (s.includes("-")) {
+              const parts = s.split("-");
+              if (parts.length === 3) {
+                const p0 = Number(parts[0]);
+                const p1 = Number(parts[1]);
+                const p2 = Number(parts[2]);
+                if (p0 > 1000) return new Date(p0, p1 - 1, p2).getTime();
+                return new Date(p2, p1 - 1, p0).getTime();
+              }
+            }
+            // Handle DD/MM/YYYY
+            if (s.includes("/")) {
+              const parts = s.split("/");
+              if (parts.length === 3) {
+                const p0 = Number(parts[0]);
+                const p1 = Number(parts[1]);
+                const p2 = Number(parts[2]);
+                if (p2 > 1000) return new Date(p2, p1 - 1, p0).getTime();
+                if (p0 > 1000) return new Date(p0, p1 - 1, p2).getTime();
+              }
+            }
+            const d = new Date(s);
+            return isNaN(d.getTime()) ? 0 : d.getTime();
+          };
+          av = parseClientDate(a.arrivalDate || "");
+          bv = parseClientDate(b.arrivalDate || "");
+          break;
+        }
+        default: return 0;
+      }
+      if(typeof av==="string") return sort.dir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
+      return sort.dir==="asc"?av-bv:bv-av;
+    });
+  }, [prices, sort]);
+
+  const handleSort = useCallback((field:SortField) => setSort(p=>({field,dir:p.field===field&&p.dir==="asc"?"desc":"asc"})),[]);
+
+  const downloadCSV = () => {
+    const rows = sorted.map((p:any)=>[p.cropName,p.variety,p.marketName,p.marketLocation?.state,p.marketLocation?.district,p.price?.min,p.price?.max,p.price?.modal,p.arrivalDate]);
+    const csv = [["Crop","Variety","Market","State","District","Min","Max","Modal","Date"],...rows].map(r=>r.join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download = `market_prices_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
+  const fbMutation = useMutation({
+    mutationFn: (d:any) => feedbackApi.create(d),
+    onSuccess: () => { toast.success("Feedback sent!"); setShowFeedback(false); setFb({subject:"",message:"",category:"general",rating:5}); },
+    onError: () => toast.error("Failed to send feedback."),
+  });
+
+  const statesAll: string[] = states.length ? states : ALL_INDIA_STATES_CLIENT;
+
+  if (pricesLoading && !priceData) return (
+    <div className="flex h-[60vh] items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-emerald-600"/>
+        <p className="text-sm font-semibold text-slate-500">Fetching live mandi prices…</p>
       </div>
-    );
-  }
+    </div>
+  );
+
+  const cols: {label:string;field:SortField}[] = [
+    {label:"CropName",field:"cropName"},{label:"Variety",field:"variety"},{label:"Market / Taluka",field:"marketName"},
+    {label:"Min Price",field:"priceMin"},{label:"Max Price",field:"priceMax"},{label:"Modal Avg",field:"priceModal"},{label:"Arrival Date",field:"arrivalDate"},
+  ];
 
   return (
-    <div className="relative min-h-screen pb-20">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4" ref={headerRef}>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Store className="h-8 w-8 text-emerald-600" />
-              {t('market.title')}
-            </h1>
-            <p className="mt-1 text-slate-500 dark:text-slate-400 font-medium">Real-time daily prices from Agmarknet OGD Platform</p>
+    <div className="relative min-h-screen pb-24">
+      <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} className="space-y-4">
+
+        {/* Compact Header Row */}
+        <div ref={headerRef} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
+              <Store className="h-5 w-5"/>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                {t("market.title")}
+                {pricesFetching && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-pulse">
+                    <Loader2 className="h-2.5 w-2.5 animate-spin"/> Live Syncing
+                  </span>
+                )}
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Daily prices & mandi arrivals · Agmarknet OGD Platform
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={downloadCSV} className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 transition-all shadow-sm font-semibold text-sm">
-              <Download className="h-4 w-4" /> Export
+
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={downloadCSV} 
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 font-bold text-xs shadow-sm transition-all"
+            >
+              <Download className="h-3.5 w-3.5"/>
+              Export CSV
             </button>
-            <button onClick={() => setShowFeedback(true)} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 font-semibold text-sm">
-              <MessageSquare className="h-4 w-4" /> Feedback
+            <button 
+              onClick={() => setShowFeedback(true)} 
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-sm transition-all"
+            >
+              <MessageSquare className="h-3.5 w-3.5"/>
+              Feedback
             </button>
           </div>
         </div>
 
-        {prices.length > 0 && (
-          <PriceTicker prices={prices.slice(0, 12).map((p: any) => ({
-            cropName: p.cropName,
-            variety: p.variety,
-            price: p.price?.modal,
-            marketName: p.marketName,
-            trend: 'stable',
-            changePercent: 0
-          }))} />
-        )}
+        {/* Price Ticker */}
+        {prices.length > 0 && <PriceTicker prices={prices.slice(0,12).map((p:any)=>({cropName:p.cropName,variety:p.variety,price:p.price?.modal,marketName:p.marketName,trend:"stable",changePercent:0}))}/>}
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Market Arrivals', value: stats.total, color: 'text-emerald-600', icon: Store },
-            { label: 'Avg Modal Price', value: formatCurrency(stats.avg), color: 'text-blue-600', icon: BarChart3 },
-            { label: 'Min Reported', value: formatCurrency(stats.min), color: 'text-amber-600', icon: ChevronDown },
-            { label: 'Max Reported', value: formatCurrency(stats.max), color: 'text-rose-600', icon: ChevronUp },
-          ].map((stat, i) => (
-            <Card key={i} className="dark:bg-slate-900 border-none shadow-sm bg-gradient-to-br from-white to-slate-50 dark:to-slate-800/50">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{stat.label}</p>
-                  <p className={`text-2xl font-black mt-1 ${stat.color}`}>{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-2xl bg-white dark:bg-slate-800 shadow-sm`}>
-                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* Filters Toolbar - Single compact row */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+            
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400"/>
+              <input 
+                type="text" 
+                placeholder="Search mandi / crop..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 pl-8 pr-2.5 py-1.5 text-xs outline-none transition-all focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-white"
+              />
+            </div>
 
-        {/* Main Filters UI (Visible by default) */}
-        <Card className="dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-              <div className="relative group">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-                <input type="text" placeholder="Search market..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none dark:bg-slate-800 dark:text-white transition-all" />
-              </div>
+            {/* State */}
+            <select 
+              value={selectedState} 
+              onChange={e => {
+                setSelectedState(e.target.value);
+                setSelectedDistrict("");
+                setSelectedTaluka("");
+              }} 
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-slate-800 dark:text-white cursor-pointer"
+            >
+              <option value="">State: All States</option>
+              {statesAll.map((s: string) => <option key={s} value={s}>{s}</option>)}
+            </select>
 
-              <select value={selectedState} onChange={(e) => { setSelectedState(e.target.value); setSelectedDistrict(''); }} className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none dark:bg-slate-800 dark:text-white cursor-pointer">
-                <option value="">All States</option>
-                {states.map((s: string) => <option key={s} value={s}>{s}</option>)}
+            {/* District */}
+            <div className="relative">
+              {districtsFetching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-emerald-500"/>}
+              <select 
+                value={selectedDistrict} 
+                onChange={e => {
+                  setSelectedDistrict(e.target.value);
+                  setSelectedTaluka("");
+                }} 
+                disabled={!selectedState} 
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-slate-800 dark:text-white disabled:opacity-50 cursor-pointer"
+              >
+                <option value="">District: All</option>
+                {districtsOptions.map((d: string) => <option key={d} value={d}>{d}</option>)}
               </select>
+            </div>
 
-              <select value={selectedDistrict} onChange={(e) => setSelectedDistrict(e.target.value)} disabled={!selectedState} className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none dark:bg-slate-800 dark:text-white disabled:opacity-50 cursor-pointer">
-                <option value="">All Districts</option>
-                {districts.map((d: string) => <option key={d} value={d}>{d}</option>)}
+            {/* Taluka */}
+            <div className="relative">
+              {talukasFetching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-emerald-500"/>}
+              <select 
+                value={selectedTaluka} 
+                onChange={e => setSelectedTaluka(e.target.value)} 
+                disabled={!selectedDistrict} 
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-slate-800 dark:text-white disabled:opacity-50 cursor-pointer"
+              >
+                <option value="">Taluka: All</option>
+                {talukasOptions.map((t: string) => <option key={t} value={t}>{t}</option>)}
               </select>
+            </div>
 
-              <select value={selectedCrop} onChange={(e) => setSelectedCrop(e.target.value)} className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none dark:bg-slate-800 dark:text-white cursor-pointer">
-                <option value="">All Commodities</option>
-                {crops.map((c: string) => <option key={c} value={c}>{c}</option>)}
-              </select>
+            {/* Commodity */}
+            <select 
+              value={selectedCrop} 
+              onChange={e => setSelectedCrop(e.target.value)} 
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-slate-800 dark:text-white cursor-pointer"
+            >
+              <option value="">Commodity: All</option>
+              {crops.map((c: string) => <option key={c} value={c}>{c}</option>)}
+            </select>
 
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-1">
               <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 pl-10 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none dark:bg-slate-800 dark:text-white" />
+                <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400"/>
+                <input 
+                  type="date" 
+                  value={fromDate} 
+                  onChange={e => setFromDate(e.target.value)} 
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 pl-6 pr-1 py-1.5 text-[10px] outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-slate-800 dark:text-white cursor-pointer"
+                />
               </div>
-
               <div className="relative">
-                <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 pl-10 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none dark:bg-slate-800 dark:text-white" />
+                <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400"/>
+                <input 
+                  type="date" 
+                  value={toDate} 
+                  onChange={e => setToDate(e.target.value)} 
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 pl-6 pr-1 py-1.5 text-[10px] outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-slate-800 dark:text-white cursor-pointer"
+                />
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Data Table */}
-        <div className="relative group overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
-          <div className="overflow-x-auto max-h-[70vh] custom-scrollbar">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 z-30 shadow-md">
-                <tr>
-                  {[
-                    { label: 'Crop', field: 'cropName' as SortField },
-                    { label: 'Variety', field: 'variety' as SortField },
-                    { label: 'Market', field: 'marketName' as SortField },
-                    { label: 'Min', field: 'priceMin' as SortField },
-                    { label: 'Max', field: 'priceMax' as SortField },
-                    { label: 'Modal', field: 'priceModal' as SortField },
-                    { label: 'Arrival Date', field: 'arrivalDate' as SortField },
-                  ].map((h) => (
-                    <th key={h.field} className="px-3 py-3 font-bold text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border-b border-slate-200 dark:border-slate-700 whitespace-nowrap text-xs uppercase tracking-wider" onClick={() => handleSort(h.field)}>
-                      <div className="flex items-center gap-1">
-                        {h.label}
-                        <ArrowUpDown className={`h-3 w-3 ${sortConfig.field === h.field ? 'text-emerald-600' : 'text-slate-300'}`} />
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredAndSortedPrices.length === 0 ? (
-                  <tr><td colSpan={7} className="px-6 py-20 text-center text-slate-400 font-medium">No market data found for the selected filters.</td></tr>
-                ) : (
-                  filteredAndSortedPrices.map((price: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group/row text-xs">
-                      <td className="px-3 py-3 font-bold text-slate-900 dark:text-white whitespace-nowrap">{price.cropName}</td>
-                      <td className="px-3 py-3 text-slate-500 font-medium whitespace-nowrap max-w-[120px] truncate" title={price.variety}>{price.variety}</td>
-                      <td className="px-3 py-3 min-w-[140px]">
-                        <div className="font-semibold text-slate-700 dark:text-slate-300 truncate" title={price.marketName}>{price.marketName}</div>
-                        <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider truncate" title={`${price.marketLocation.district}, ${price.marketLocation.state}`}>{price.marketLocation.district}, {price.marketLocation.state}</div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap">{formatCurrency(price.price.min)}</td>
-                      <td className="px-3 py-3 text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap">{formatCurrency(price.price.max)}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-black shadow-sm">
-                          {formatCurrency(price.price.modal)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-slate-500 font-medium whitespace-nowrap">{price.arrivalDate}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
+
+          {(search || selectedState || selectedDistrict || selectedTaluka || selectedCrop || fromDate || toDate) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-[11px]">
+              <span className="font-semibold text-slate-400 mr-1">Active Filters:</span>
+              {search && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  "{search}"
+                  <X className="h-2.5 w-2.5 cursor-pointer hover:text-red-500" onClick={() => setSearch("")}/>
+                </span>
+              )}
+              {selectedState && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
+                  {selectedState}
+                  <X className="h-2.5 w-2.5 cursor-pointer hover:text-red-500" onClick={() => { setSelectedState(""); setSelectedDistrict(""); setSelectedTaluka(""); }}/>
+                </span>
+              )}
+              {selectedDistrict && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
+                  {selectedDistrict}
+                  <X className="h-2.5 w-2.5 cursor-pointer hover:text-red-500" onClick={() => { setSelectedDistrict(""); setSelectedTaluka(""); }}/>
+                </span>
+              )}
+              {selectedTaluka && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
+                  {selectedTaluka}
+                  <X className="h-2.5 w-2.5 cursor-pointer hover:text-red-500" onClick={() => setSelectedTaluka("")}/>
+                </span>
+              )}
+              {selectedCrop && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
+                  {selectedCrop}
+                  <X className="h-2.5 w-2.5 cursor-pointer hover:text-red-500" onClick={() => setSelectedCrop("")}/>
+                </span>
+              )}
+              {(fromDate || toDate) && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400">
+                  {fromDate || "*"} - {toDate || "*"}
+                  <X className="h-2.5 w-2.5 cursor-pointer hover:text-red-500" onClick={() => { setFromDate(""); setToDate(""); }}/>
+                </span>
+              )}
+              <button 
+                onClick={() => { setSearch(""); setSelectedState(""); setSelectedDistrict(""); setSelectedTaluka(""); setSelectedCrop(""); setFromDate(""); setToDate(""); }}
+                className="text-red-500 hover:text-red-650 transition-colors ml-auto hover:underline font-bold text-[10px]"
+              >
+                Clear All
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Mandi Records Listing */}
+        {sorted.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm">
+            <div className="p-4 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 mb-4">
+              <Store className="h-10 w-10" />
+            </div>
+            <h3 className="text-base font-bold text-slate-700 dark:text-slate-300">No Mandi Prices Found</h3>
+            <p className="mt-1 text-sm text-slate-500 max-w-sm">
+              We couldn't find any pricing records matching your search queries. Try adjusting your state, district, or date range filters.
+            </p>
+            {(search || selectedState || selectedDistrict || selectedTaluka || selectedCrop || fromDate || toDate) && (
+              <button
+                onClick={() => { setSearch(""); setSelectedState(""); setSelectedDistrict(""); setSelectedTaluka(""); setSelectedCrop(""); setFromDate(""); setToDate(""); }}
+                className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-sm transition-all"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+              <div className="overflow-x-auto max-h-[65vh] overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                  <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-800 shadow-sm">
+                    <tr>
+                      {cols.map(h => (
+                        <th 
+                          key={h.field} 
+                          onClick={() => handleSort(h.field)} 
+                          className="px-5 py-4 font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 whitespace-nowrap border-b border-slate-200 dark:border-slate-700 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {h.label}
+                            <ArrowUpDown className={`h-3.5 w-3.5 ${sort.field === h.field ? "text-emerald-500" : "text-slate-300 dark:text-slate-600"}`}/>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {sorted.map((p: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+                        <td className="px-5 py-4 font-bold text-slate-950 dark:text-white whitespace-nowrap">{p.cropName}</td>
+                        <td className="px-5 py-4 text-slate-500 dark:text-slate-400 whitespace-nowrap max-w-[120px] truncate" title={p.variety}>
+                          {p.variety}
+                        </td>
+                        <td className="px-5 py-4 min-w-[150px]">
+                          <div className="font-bold text-slate-800 dark:text-slate-250 truncate" title={p.marketName}>{p.marketName}</div>
+                          <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate mt-0.5">
+                            {p.marketLocation?.district}, {p.marketLocation?.state}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-slate-600 dark:text-slate-400 whitespace-nowrap font-medium">{formatCurrency(p.price?.min)}</td>
+                        <td className="px-5 py-4 text-slate-600 dark:text-slate-400 whitespace-nowrap font-medium">{formatCurrency(p.price?.max)}</td>
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <span className="inline-flex px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-extrabold text-sm shadow-sm group-hover:scale-105 transition-transform">
+                            {formatCurrency(p.price?.modal)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-slate-500 dark:text-slate-400 whitespace-nowrap font-medium">{p.arrivalDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Card Grid View */}
+            <div className="md:hidden grid grid-cols-1 gap-4">
+              {sorted.map((p: any, i: number) => (
+                <Card key={i} className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 space-y-3">
+                    {/* Crop Name and Arrival Date */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white">{p.cropName}</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Variety: <span className="font-semibold">{p.variety}</span></p>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                        <CalIcon className="h-3 w-3"/>
+                        {p.arrivalDate}
+                      </div>
+                    </div>
+
+                    {/* Market Details */}
+                    <div className="border-t border-b border-slate-100 dark:border-slate-800/80 py-2.5">
+                      <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Mandi / Location</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">{p.marketName}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">{p.marketLocation?.district}, {p.marketLocation?.state}</p>
+                    </div>
+
+                    {/* Prices Grid */}
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-center">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Min Price</p>
+                        <p className="text-xs font-bold text-slate-650 dark:text-slate-350 mt-0.5">{formatCurrency(p.price?.min)}</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-center">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Max Price</p>
+                        <p className="text-xs font-bold text-slate-650 dark:text-slate-350 mt-0.5">{formatCurrency(p.price?.max)}</p>
+                      </div>
+                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/30 text-center">
+                        <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Modal Avg</p>
+                        <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{formatCurrency(p.price?.modal)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
       </motion.div>
 
-      {/* Floating Sticky Sidebar Trigger (Visible when header is sticky) */}
+      {/* Floating sort button (sticky) */}
       <AnimatePresence>
-        {isHeaderSticky && (
-          <motion.div initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 100, opacity: 0 }} className="fixed right-6 bottom-10 z-[100] flex flex-col gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2 px-6 py-3.5 bg-emerald-600 text-white rounded-full shadow-2xl shadow-emerald-600/40 hover:bg-emerald-700 hover:scale-105 transition-all font-bold ring-4 ring-white dark:ring-slate-900">
-              <SlidersHorizontal className="h-5 w-5" />
-              Sort & Filter
-            </button>
-          </motion.div>
+        {isSticky&&(
+          <motion.button initial={{x:100,opacity:0}} animate={{x:0,opacity:1}} exit={{x:100,opacity:0}} onClick={()=>setSidebarOpen(true)} className="fixed right-6 bottom-10 z-[100] flex items-center gap-2 px-5 py-3.5 bg-emerald-600 text-white rounded-full shadow-2xl shadow-emerald-600/40 hover:bg-emerald-700 font-bold ring-4 ring-white dark:ring-slate-900">
+            <SlidersHorizontal className="h-5 w-5"/>Sort & Filter
+          </motion.button>
         )}
       </AnimatePresence>
 
-      {/* Slide-out Sidebar for Sorting & Filtering */}
+      {/* Slide-out sidebar */}
       <AnimatePresence>
-        {isSidebarOpen && (
+        {sidebarOpen&&(
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110]" />
-            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed right-0 top-0 h-screen w-full max-w-sm bg-white dark:bg-slate-900 z-[120] shadow-2xl p-6 overflow-y-auto">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-black dark:text-white flex items-center gap-2">
-                  <Filter className="h-6 w-6 text-emerald-600" />
-                  Advanced Tools
-                </h2>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><X className="h-6 w-6 text-slate-500" /></button>
-              </div>
-
-              <div className="space-y-8">
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setSidebarOpen(false)} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110]"/>
+            <motion.div initial={{x:"100%"}} animate={{x:0}} exit={{x:"100%"}} transition={{type:"spring",damping:25,stiffness:200}} className="fixed right-0 top-0 h-screen w-full max-w-xs bg-white dark:bg-slate-900 z-[120] shadow-2xl p-6 overflow-y-auto flex flex-col">
+              <div className="flex items-center justify-between mb-6"><h2 className="text-xl font-black dark:text-white flex items-center gap-2"><Filter className="h-5 w-5 text-emerald-600"/>Sort & Filter</h2><button onClick={()=>setSidebarOpen(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5 text-slate-500"/></button></div>
+              <div className="space-y-6 flex-1">
                 <section>
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Sorting Options</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      { label: 'Price (Modal)', field: 'priceModal' },
-                      { label: 'Commodity Name', field: 'cropName' },
-                      { label: 'Market Name', field: 'marketName' },
-                      { label: 'Arrival Date', field: 'arrivalDate' },
-                    ].map((opt) => (
-                      <button key={opt.field} onClick={() => handleSort(opt.field as SortField)} className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all text-sm font-bold ${sortConfig.field === opt.field ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-emerald-300'}`}>
-                        {opt.label}
-                        {sortConfig.field === opt.field && (sortConfig.direction === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Sort By</h3>
+                  <div className="space-y-2">
+                    {([["priceModal","Modal Price"],["cropName","Crop Name"],["marketName","Market / Taluka"],["arrivalDate","Arrival Date"]] as [SortField,string][]).map(([f,l])=>(
+                      <button key={f} onClick={()=>handleSort(f)} className={`flex items-center justify-between w-full px-4 py-2.5 rounded-xl border text-sm font-bold transition-all ${sort.field===f?"bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-600":"bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-emerald-300"}`}>
+                        {l}{sort.field===f&&(sort.dir==="asc"?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>)}
                       </button>
                     ))}
                   </div>
                 </section>
-
                 <section>
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Quick Filters</h3>
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-500 px-1">Search Keywords</label>
-                      <input type="text" placeholder="Search Mandi..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm dark:bg-slate-800 dark:text-white" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-500 px-1">Select State</label>
-                      <select value={selectedState} onChange={(e) => setSelectedState(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm dark:bg-slate-800 dark:text-white">
-                        <option value="">All India</option>
-                        {states.map((s: string) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Quick Filter</h3>
+                  <input type="text" placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/20"/>
                 </section>
-
-                <div className="pt-6 border-t border-slate-100 dark:border-slate-800 flex gap-3">
-                  <button onClick={() => { setSearch(''); setSelectedState(''); setSelectedCrop(''); setSelectedDistrict(''); setFromDate(''); setToDate(''); }} className="flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-200 transition-colors">Reset All</button>
-                  <button onClick={() => setIsSidebarOpen(false)} className="flex-1 py-4 rounded-2xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 shadow-lg shadow-emerald-600/30 transition-all">Apply View</button>
-                </div>
+              </div>
+              <div className="mt-6 flex gap-3">
+                <button onClick={()=>{setSearch("");setSelectedState("");setSelectedDistrict("");setSelectedTaluka("");setSelectedCrop("");setFromDate("");setToDate("");}} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm">Reset</button>
+                <button onClick={()=>setSidebarOpen(false)} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm">Apply</button>
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      {/* Feedback Modal */}
+      {/* Feedback modal */}
       <AnimatePresence>
-        {showFeedback && (
+        {showFeedback&&(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[200] p-4">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800">
-              <div className="p-8">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-black dark:text-white">Share your experience</h2>
-                  <button onClick={() => setShowFeedback(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X className="h-5 w-5 text-slate-400" /></button>
-                </div>
-                <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-3">
-                    {['bug', 'feature', 'general', 'other'].map((cat) => (
-                      <button key={cat} onClick={() => setFeedback({ ...feedback, category: cat as any })} className={`py-3 rounded-2xl border-2 text-sm font-bold capitalize transition-all ${feedback.category === cat ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-500 hover:border-emerald-200'}`}>{cat}</button>
-                    ))}
-                  </div>
-                  <input type="text" placeholder="Brief subject" value={feedback.subject} onChange={(e) => setFeedback({ ...feedback, subject: e.target.value })} className="w-full rounded-2xl border border-slate-100 dark:border-slate-800 p-4 text-sm dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
-                  <textarea rows={5} placeholder="What can we improve? We're listening..." value={feedback.message} onChange={(e) => setFeedback({ ...feedback, message: e.target.value })} className="w-full rounded-2xl border border-slate-100 dark:border-slate-800 p-4 text-sm dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none" />
-                </div>
-                <button onClick={() => feedbackMutation.mutate({ ...feedback, name: user?.name || 'Anonymous', email: user?.email || 'anonymous@agrivision.com' })} disabled={feedbackMutation.isPending || !feedback.message} className="w-full mt-8 py-5 bg-emerald-600 text-white rounded-[24px] font-black shadow-xl shadow-emerald-600/30 hover:bg-emerald-700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100">{feedbackMutation.isPending ? 'Sending your feedback...' : 'Send Feedback'}</button>
+            <motion.div initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}} className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md p-7 shadow-2xl border border-slate-100 dark:border-slate-800">
+              <div className="flex justify-between items-center mb-5"><h2 className="text-xl font-black dark:text-white">Share Feedback</h2><button onClick={()=>setShowFeedback(false)}><X className="h-5 w-5 text-slate-400"/></button></div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">{["bug","feature","general","other"].map(cat=><button key={cat} onClick={()=>setFb({...fb,category:cat as any})} className={`py-2.5 rounded-2xl border-2 text-sm font-bold capitalize ${fb.category===cat?"bg-emerald-600 border-emerald-600 text-white":"border-slate-100 dark:border-slate-700 text-slate-500 hover:border-emerald-200"}`}>{cat}</button>)}</div>
+                <input type="text" placeholder="Subject" value={fb.subject} onChange={e=>setFb({...fb,subject:e.target.value})} className="w-full rounded-2xl border border-slate-100 dark:border-slate-800 p-4 text-sm dark:bg-slate-800 dark:text-white outline-none"/>
+                <textarea rows={4} placeholder="What can we improve?" value={fb.message} onChange={e=>setFb({...fb,message:e.target.value})} className="w-full rounded-2xl border border-slate-100 dark:border-slate-800 p-4 text-sm dark:bg-slate-800 dark:text-white outline-none resize-none"/>
               </div>
+              <button onClick={()=>fbMutation.mutate({...fb,name:user?.name||"Anonymous",email:user?.email||""})} disabled={fbMutation.isPending||!fb.message} className="w-full mt-5 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-lg disabled:opacity-50">{fbMutation.isPending?"Sending…":"Send Feedback"}</button>
             </motion.div>
           </div>
         )}
