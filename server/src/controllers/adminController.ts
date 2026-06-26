@@ -161,7 +161,9 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
     if (req.query.isActive !== undefined) filter.isActive = req.query.isActive === 'true';
     if (req.query.state) filter.state = { $regex: req.query.state as string, $options: 'i' };
     if (req.query.search) {
-      const regex = { $regex: req.query.search as string, $options: 'i' };
+      // Escape special characters to prevent Regular Expression Injection (ReDoS)
+      const safeSearch = (req.query.search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: safeSearch, $options: 'i' };
       filter.$or = [{ name: regex }, { email: regex }];
     }
 
@@ -171,6 +173,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
     const [users, total] = await Promise.all([
       User.find(filter)
         .select('-password')
+        .populate('updatedBy', 'name email')
         .sort({ [sortField]: sortOrder })
         .skip(skip)
         .limit(limit)
@@ -223,8 +226,8 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     if (!['FARMER', 'BUYER', 'ADMIN'].includes(role)) {
       return res.status(400).json({ success: false, message: 'Invalid role' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
     }
 
     const exists = await User.findOne({ email: email.toLowerCase().trim() });
@@ -251,6 +254,9 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
     const userObj = user.toObject() as unknown as Record<string, unknown>;
     delete userObj.password;
+
+    console.log(`[AUDIT] ✅ User created. Admin ID: ${req.user?._id}, Created User Email: ${email.toLowerCase().trim()}, Role: ${role}, Timestamp: ${new Date().toISOString()}`);
+
     res.status(201).json({ success: true, message: 'User created successfully', data: userObj });
   } catch (err) {
     sendError(res, 500, 'Failed to create user', err);
@@ -268,6 +274,7 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
     const allowedFields = [
       'name', 'email', 'role', 'isActive', 'phoneNumber',
       'state', 'district', 'farmName', 'farmSizeAcres', 'preferredLanguage',
+      'taluka', 'village', 'pincode', 'aadharNumber', 'bankDetails',
     ];
     const updateData: Record<string, unknown> = {};
     allowedFields.forEach((f) => {
@@ -290,6 +297,8 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
+    console.log(`[AUDIT] ✅ User updated. Admin ID: ${req.user?._id}, Target User ID: ${id}, Fields: ${Object.keys(updateData).join(', ')}, Timestamp: ${new Date().toISOString()}`);
+
     res.json({ success: true, message: 'User updated successfully', data: user });
   } catch (err) {
     sendError(res, 500, 'Failed to update user', err);
@@ -304,8 +313,8 @@ export const changeUserPassword = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid user ID' });
     }
     const { password } = req.body;
-    if (!password || password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    if (!password || password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
     }
 
     const hashed = await bcrypt.hash(password, 12);
@@ -316,6 +325,9 @@ export const changeUserPassword = async (req: AuthRequest, res: Response) => {
     ).select('-password');
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    console.log(`[AUDIT] 🔑 User password changed. Admin ID: ${req.user?._id}, Target User ID: ${id}, Timestamp: ${new Date().toISOString()}`);
+
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
     sendError(res, 500, 'Failed to change password', err);
@@ -338,9 +350,11 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
     const hardDelete = req.query.hard === 'true';
     if (hardDelete) {
       await User.findByIdAndDelete(id);
+      console.log(`[AUDIT] 🗑️ User permanently deleted. Admin ID: ${req.user?._id}, Target User ID: ${id}, Timestamp: ${new Date().toISOString()}`);
     } else {
       // Soft delete — deactivate
       await User.findByIdAndUpdate(id, { isActive: false });
+      console.log(`[AUDIT] ⛔ User soft-deleted/deactivated. Admin ID: ${req.user?._id}, Target User ID: ${id}, Timestamp: ${new Date().toISOString()}`);
     }
 
     res.json({ success: true, message: hardDelete ? 'User permanently deleted' : 'User deactivated' });

@@ -45,6 +45,7 @@ interface AppState {
   isSidebarCollapsed: boolean;
   isAnalyzing: boolean; // AI processing state
   uploadProgress: number;
+  viewMode: 'table' | 'card';
 
   // Actions
   setUser: (user: User, token: string) => void;
@@ -59,6 +60,8 @@ interface AppState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   setIsAnalyzing: (analyzing: boolean) => void;
   setUploadProgress: (progress: number) => void;
+  setViewMode: (mode: 'table' | 'card') => void;
+  toggleViewMode: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,6 +85,7 @@ export const useAppStore = create<AppState>()(
       isSidebarCollapsed: false,
       isAnalyzing: false,
       uploadProgress: 0,
+      viewMode: 'table',
 
       // ── Auth Actions ──────────────────────────────────────────────────────
       setUser: (user, token) => {
@@ -137,6 +141,8 @@ export const useAppStore = create<AppState>()(
       setSidebarCollapsed: (collapsed) => set({ isSidebarCollapsed: collapsed }),
       setIsAnalyzing: (analyzing) => set({ isAnalyzing: analyzing }),
       setUploadProgress: (progress) => set({ uploadProgress: progress }),
+      setViewMode: (mode) => set({ viewMode: mode }),
+      toggleViewMode: () => set((state) => ({ viewMode: state.viewMode === 'table' ? 'card' : 'table' })),
     }),
     {
       name: 'agrivision-store',
@@ -144,6 +150,7 @@ export const useAppStore = create<AppState>()(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        viewMode: state.viewMode,
       }),
     }
   )

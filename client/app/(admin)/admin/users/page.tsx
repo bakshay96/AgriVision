@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, Trash2, X, UserPlus, Tractor,
   ShoppingBag, Shield, Users, Eye, EyeOff,
-  RefreshCw, Pencil, Key
+  RefreshCw, Pencil, Key, LayoutGrid, List
 } from 'lucide-react';
 import UserTable, { AdminUser } from '@/components/admin/UserTable';
 import EditUserModal from '@/components/admin/EditUserModal';
@@ -123,10 +123,10 @@ function CreateUserModal({ isOpen, onClose, onSave }: CreateUserModalProps) {
       {isOpen && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={handleClose} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+            onClick={handleClose} className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm" />
           <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 16 }} transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <div className="w-full max-w-lg rounded-2xl border border-amber-200/60 bg-white shadow-2xl shadow-amber-500/10 dark:border-slate-700 dark:bg-slate-900 max-h-[90vh] overflow-y-auto">
               {/* Header */}
               <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900 z-10">
@@ -294,9 +294,9 @@ function ChangePasswordModal({ user, isOpen, onClose, onSave }: ChangePasswordMo
       {isOpen && user && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={handleClose} className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" />
+            onClick={handleClose} className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm" />
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }} className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            exit={{ opacity: 0, scale: 0.95 }} className="fixed inset-0 z-[130] flex items-center justify-center p-4">
             <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center gap-3 mb-4">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
@@ -344,7 +344,7 @@ function ChangePasswordModal({ user, isOpen, onClose, onSave }: ChangePasswordMo
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminUsersPage() {
-  const { token } = useAppStore();
+  const { token, viewMode, toggleViewMode } = useAppStore();
   const qc = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('');
@@ -419,13 +419,24 @@ export default function AdminUsersPage() {
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">User Management</h1>
           <p className="text-sm text-slate-500 mt-0.5">View, create, edit and manage all platform users</p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 transition-colors shadow-md shadow-amber-500/20"
-        >
-          <UserPlus className="h-4 w-4" />
-          Add New User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleViewMode}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-850 transition-colors shadow-sm"
+            title={`Switch to ${viewMode === 'table' ? 'Card' : 'Table'} view`}
+            type="button"
+          >
+            {viewMode === 'table' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
+          </button>
+          
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 transition-colors shadow-md shadow-amber-500/20"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add New User
+          </button>
+        </div>
       </div>
 
       {/* Role Tabs */}
@@ -479,6 +490,7 @@ export default function AdminUsersPage() {
         onEdit={setEditUser}
         onDelete={setDeleteTarget}
         onChangePassword={setPwUser}
+        viewMode={viewMode}
       />
 
       {/* Modals */}
@@ -507,9 +519,9 @@ export default function AdminUsersPage() {
         {deleteTarget && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setDeleteTarget(null)} className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" />
+              onClick={() => setDeleteTarget(null)} className="fixed inset-0 z-[140] bg-black/40 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }} className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              exit={{ opacity: 0, scale: 0.95 }} className="fixed inset-0 z-[150] flex items-center justify-center p-4">
               <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30">
