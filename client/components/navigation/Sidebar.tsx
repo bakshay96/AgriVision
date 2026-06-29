@@ -94,8 +94,33 @@ export default function Sidebar() {
           // Mobile: slide in/out. Desktop: animate width
           x: isMobile ? (isSidebarOpen ? 0 : -240) : 0,
           width: isMobile ? 240 : (isSidebarCollapsed ? COLLAPSED_W : EXPANDED_W),
+          // Right-edge curves outward — left lobe of ∞
+          borderTopRightRadius: isSidebarCollapsed
+            ? ['0px', '48px', '64px', '48px', '0px']
+            : ['0px', '48px', '64px', '48px', '0px'],
+          borderBottomRightRadius: isSidebarCollapsed
+            ? ['0px', '48px', '64px', '48px', '0px']
+            : ['0px', '48px', '64px', '48px', '0px'],
+          // Emerald glow on the right boundary edge
+          boxShadow: isSidebarCollapsed
+            ? [
+                '4px 0px 0px 0px rgba(16,185,129,0)',
+                '8px 0px 24px 2px rgba(16,185,129,0.6)',
+                '4px 0px 0px 0px rgba(16,185,129,0)'
+              ]
+            : [
+                '4px 0px 0px 0px rgba(16,185,129,0)',
+                '8px 0px 24px 2px rgba(16,185,129,0.6)',
+                '4px 0px 0px 0px rgba(16,185,129,0)'
+              ]
         }}
-        transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+        transition={{
+          x: { type: 'spring', damping: 28, stiffness: 260 },
+          width: { duration: 0.4, ease: [0.4, 0, 0.2, 1] },
+          borderTopRightRadius: { duration: 0.45, ease: 'easeInOut' },
+          borderBottomRightRadius: { duration: 0.45, ease: 'easeInOut' },
+          boxShadow: { duration: 0.45, ease: 'easeInOut' }
+        }}
         className={cn(
           // Base — always a vertical flex column
           'relative flex flex-col h-full flex-shrink-0',

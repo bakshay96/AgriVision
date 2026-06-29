@@ -22,6 +22,7 @@ import { useLanguageStore } from '@/store/useLanguageStore';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import WeatherWidget from '@/components/dashboard/WeatherWidget';
+import AnimatedCounter from '@/components/ui/AnimatedCounter';
 
 const container = {
   hidden: { opacity: 0 },
@@ -141,7 +142,9 @@ export default function DashboardPage() {
                       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{stat.label}</p>
                       <div className={`rounded-lg p-2 ${stat.bg}`}><stat.icon className={`h-4 w-4 ${stat.color}`} /></div>
                     </div>
-                    <p className="mt-3 text-2xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+                    <p className="mt-3 text-2xl font-bold text-slate-900 dark:text-white">
+                      <AnimatedCounter value={stat.value} />
+                    </p>
                     <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{stat.change}</p>
                   </motion.div>
                 ))}

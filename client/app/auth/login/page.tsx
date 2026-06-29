@@ -65,15 +65,15 @@ const ROLE_FEATURES = {
   farmer: [
     { title: 'Market Price Insights', description: 'Real-time division & sub-division tracking across all Indian mandi markets.', icon: TrendingUp, color: 'from-emerald-500 to-teal-600' },
     { title: 'AI Crop Health Detection', description: 'Instant AI disease detection, treatment suggestions, and agronomy advice.', icon: Camera, color: 'from-emerald-600 to-green-600' },
-    { title: 'B2B Milk Supply Matching', description: 'Direct buyer negotiations, pricing agreements, and contract management.', icon: Handshake, color: 'from-teal-500 to-emerald-600' },
+    { title: 'B2B Crop Supply Matching', description: 'Direct buyer negotiations, pricing agreements, and contract management.', icon: Handshake, color: 'from-teal-500 to-emerald-600' },
     { title: 'WhatsApp-Style Rich Chat', description: 'Send voice messages, documents, and product images in real time.', icon: MessageCircle, color: 'from-emerald-500 to-green-600' },
     { title: 'Micro-Weather Forecasts', description: 'Precise weather forecasts and notifications to schedule harvesting.', icon: CloudSun, color: 'from-amber-500 to-orange-500' },
   ],
   buyer: [
-    { title: 'Direct Sourcing Hub', description: 'Connect directly with verified local dairy farmers to secure daily supply.', icon: ShoppingBag, color: 'from-blue-500 to-indigo-600' },
-    { title: 'Supply Chain Analytics', description: 'Monitor collection volumes, fat content, SNF quality, and billing details.', icon: BarChart3, color: 'from-indigo-500 to-violet-600' },
+    { title: 'Direct Sourcing Hub', description: 'Connect directly with verified local growers to secure daily supply.', icon: ShoppingBag, color: 'from-blue-500 to-indigo-600' },
+    { title: 'Supply Chain Analytics', description: 'Monitor crop collection volumes, quality grades, moisture levels, and billing details.', icon: BarChart3, color: 'from-indigo-500 to-violet-600' },
     { title: 'B2B Negotiator', description: 'Lock quantity commitments and pricing terms directly with individual farms.', icon: Handshake, color: 'from-indigo-600 to-blue-600' },
-    { title: 'Geographic Map Explorer', description: 'Visualize farmer networks and optimize milk logistics routes.', icon: Map, color: 'from-cyan-500 to-blue-600' },
+    { title: 'Geographic Map Explorer', description: 'Visualize farmer networks and optimize crop logistics routes.', icon: Map, color: 'from-cyan-500 to-blue-600' },
     { title: 'Delivery Management', description: 'Track dispatch logs, transit statuses, and generate digital receipt invoices.', icon: Truck, color: 'from-purple-500 to-pink-600' },
   ],
   admin: [
@@ -424,25 +424,27 @@ export default function LoginPage() {
 
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl p-8 transition-colors duration-300">
 
-            {/* ── Role Selector Links (always visible, top of card) */}
-            <div className="flex gap-2 mb-6 p-1 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-              {(['farmer', 'buyer'] as const).map((r) => {
-                const cfg = ROLE_LINK_CONFIG[r];
-                const isActive = activeRole === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => switchRole(r)}
-                    className={`flex-1 py-2 px-1 rounded-lg text-[11px] font-bold tracking-wide transition-all duration-200 ${
-                      isActive ? cfg.active : cfg.idle
-                    }`}
-                  >
-                    {cfg.label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* ── Role Selector Links (visible only for non-admin modes) */}
+            {activeRole !== 'admin' && (
+              <div className="flex gap-2 mb-6 p-1 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                {(['farmer', 'buyer'] as const).map((r) => {
+                  const cfg = ROLE_LINK_CONFIG[r];
+                  const isActive = activeRole === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => switchRole(r)}
+                      className={`flex-1 py-2 px-1 rounded-lg text-[11px] font-bold tracking-wide transition-all duration-200 ${
+                        isActive ? cfg.active : cfg.idle
+                      }`}
+                    >
+                      {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Form messages */}
             <AnimatePresence mode="wait">

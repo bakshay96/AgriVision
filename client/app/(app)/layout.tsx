@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import Sidebar from '@/components/navigation/Sidebar';
 import Navbar from '@/components/navigation/Navbar';
 import MobileBottomNav from '@/components/navigation/MobileBottomNav';
@@ -12,30 +13,22 @@ import ChatLauncher from '@/components/chat/ChatLauncher';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated } = useAppStore();
-
-  // ── Hydration guard ────────────────────────────────────────────────────────
-  // Zustand persist rehydrates from localStorage asynchronously.
-  // We must wait for the first client-side render before checking auth,
-  // otherwise isAuthenticated is always false (SSR initial state) and we
-  // immediately redirect logged-in users to /auth/login.
+  const { isAuthenticated, isSidebarCollapsed } = useAppStore();
   const [mounted, setMounted] = useState(false);
 
+  // ── Hydration guard ────────────────────────────────────────────────────────
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Initialize socket connection (no-op until authenticated)
   useSocket();
 
-  // Redirect unauthenticated users after mount
   useEffect(() => {
     if (mounted && !isAuthenticated) {
       router.push('/auth/login');
     }
   }, [mounted, isAuthenticated, router]);
 
-  // Don't render anything until Zustand has rehydrated from localStorage
   if (!mounted) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -47,7 +40,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Show loading while redirecting
   if (!isAuthenticated) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -62,18 +54,55 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-900">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+
+      {/*
+       * Main panel — right lobe of the figure-8.
+       * Left edge curves INWARD while the Sidebar right edge curves OUTWARD,
+       * together forming the crossing point of a lemniscate (∞) at the
+       * shared boundary between both panels.
+       */}
+      <motion.div
+        animate={{
+          // Left edge curves inward — the concave side of the right lobe
+          borderTopLeftRadius: isSidebarCollapsed
+            ? ['0px', '48px', '64px', '48px', '0px']
+            : ['0px', '48px', '64px', '48px', '0px'],
+          borderBottomLeftRadius: isSidebarCollapsed
+            ? ['0px', '48px', '64px', '48px', '0px']
+            : ['0px', '48px', '64px', '48px', '0px'],
+          // Vertical pinch at the crossing point
+          scaleY: isSidebarCollapsed
+            ? [1, 0.985, 1.008, 0.998, 1]
+            : [1, 0.985, 1.008, 0.998, 1],
+          // Emerald glow on the left edge — visible crossing point of ∞
+          boxShadow: isSidebarCollapsed
+            ? [
+                '-4px 0px 0px 0px rgba(16,185,129,0)',
+                '-10px 0px 28px 4px rgba(16,185,129,0.55)',
+                '-4px 0px 0px 0px rgba(16,185,129,0)'
+              ]
+            : [
+                '-4px 0px 0px 0px rgba(16,185,129,0)',
+                '-10px 0px 28px 4px rgba(16,185,129,0.55)',
+                '-4px 0px 0px 0px rgba(16,185,129,0)'
+              ]
+        }}
+        transition={{
+          borderTopLeftRadius: { duration: 0.45, ease: 'easeInOut' },
+          borderBottomLeftRadius: { duration: 0.45, ease: 'easeInOut' },
+          scaleY: { duration: 0.45, ease: 'easeInOut' },
+          boxShadow: { duration: 0.45, ease: 'easeInOut' }
+        }}
+        className="flex flex-1 flex-col overflow-hidden origin-center"
+      >
         <Navbar />
         <main className="flex-1 overflow-y-auto px-4 py-6 pb-20 sm:px-6 lg:px-8 md:pb-6">
           {children}
         </main>
-      </div>
-      {/* Mobile bottom navigation (visible on small screens only) */}
+      </motion.div>
+
       <MobileBottomNav />
-      {/* Floating Chat Container - renders all active chat widgets */}
       <FloatingChatContainer />
-      
-      {/* Chat Launcher Button */}
       <ChatLauncher />
     </div>
   );

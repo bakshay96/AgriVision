@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  IndianRupee, TrendingUp, TrendingDown, Plus, Calendar,
+import { IndianRupee, TrendingUp, TrendingDown, Plus, Calendar,
   Filter, Download, PieChart, ArrowUpRight, ArrowDownRight,
   Wallet, Receipt, Sprout, Tractor, Package, X, ChevronDown,
   ChevronUp
@@ -16,6 +15,7 @@ import { formatCurrency } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { showErrorToast } from '@/lib/errorHandler';
+import AnimatedCounter from '@/components/ui/AnimatedCounter';
 
 interface FinancialRecord {
   _id: string;
@@ -138,12 +138,12 @@ export default function FinancialPage() {
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Total Income</p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(summary?.totalIncome || 0)}
+                  <AnimatedCounter value={formatCurrency(summary?.totalIncome || 0)} />
                 </p>
                 {incomeTrend !== 0 && (
                   <div className={cn("flex items-center gap-1 text-xs mt-1", incomeTrend > 0 ? "text-emerald-600" : "text-red-600")}>
                     {incomeTrend > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                    {Math.abs(incomeTrend).toFixed(1)}% vs last month
+                    <AnimatedCounter value={`${Math.abs(incomeTrend).toFixed(1)}%`} /> vs last month
                   </div>
                 )}
               </div>
@@ -160,12 +160,12 @@ export default function FinancialPage() {
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Total Expenses</p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                  {formatCurrency(summary?.totalExpense || 0)}
+                  <AnimatedCounter value={formatCurrency(summary?.totalExpense || 0)} />
                 </p>
                 {expenseTrend !== 0 && (
                   <div className={cn("flex items-center gap-1 text-xs mt-1", expenseTrend > 0 ? "text-red-600" : "text-emerald-600")}>
                     {expenseTrend > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                    {Math.abs(expenseTrend).toFixed(1)}% vs last month
+                    <AnimatedCounter value={`${Math.abs(expenseTrend).toFixed(1)}%`} /> vs last month
                   </div>
                 )}
               </div>
@@ -182,10 +182,10 @@ export default function FinancialPage() {
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Net Profit</p>
                 <p className={cn("text-2xl font-bold", (summary?.netProfit || 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-                  {formatCurrency(summary?.netProfit || 0)}
+                  <AnimatedCounter value={formatCurrency(summary?.netProfit || 0)} />
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {summary?.profitMargin || 0}% margin
+                  <AnimatedCounter value={`${summary?.profitMargin || 0}%`} /> margin
                 </p>
               </div>
               <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
@@ -201,7 +201,7 @@ export default function FinancialPage() {
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Transactions</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {records.length}
+                  <AnimatedCounter value={records.length} />
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
                   This year

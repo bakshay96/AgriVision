@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
+import AnimatedCounter from '@/components/ui/AnimatedCounter';
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -62,7 +63,7 @@ function KpiItem({
       <div className="min-w-0">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
         <p className="text-base font-bold tabular-nums text-slate-900 dark:text-white leading-tight">
-          {typeof value === 'number' ? value.toLocaleString() : value}
+          <AnimatedCounter value={value} />
         </p>
         {sub && <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">{sub}</p>}
       </div>
@@ -308,7 +309,7 @@ export default function AdminDashboardPage() {
                       />
                     </div>
                     <span className="w-16 text-right text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      {st.count} <span className="text-slate-400">({pct}%)</span>
+                      <AnimatedCounter value={st.count} /> <span className="text-slate-400">(<AnimatedCounter value={pct} />%)</span>
                     </span>
                   </div>
                 );
