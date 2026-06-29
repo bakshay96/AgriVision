@@ -92,6 +92,7 @@ export const useAppStore = create<AppState>()(
         if (typeof window !== 'undefined') {
           localStorage.setItem('agrivision_token', token);
           localStorage.setItem('agrivision_user', JSON.stringify(user));
+          localStorage.setItem('agrivision_last_activity', Date.now().toString());
         }
         set({ user, token, isAuthenticated: true });
       },
@@ -100,6 +101,8 @@ export const useAppStore = create<AppState>()(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('agrivision_token');
           localStorage.removeItem('agrivision_user');
+          localStorage.removeItem('agrivision_last_activity');
+          localStorage.removeItem('agrivision_session_start');
         }
         set({ user: null, token: null, isAuthenticated: false, notifications: [], unreadCount: 0 });
       },

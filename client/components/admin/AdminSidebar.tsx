@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,8 +32,7 @@ const navItems = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { clearUser, user, isSidebarOpen, setSidebarOpen } = useAppStore();
-  const [collapsed, setCollapsed] = useState(false);
+  const { clearUser, user, isSidebarOpen, setSidebarOpen, isSidebarCollapsed: collapsed, setSidebarCollapsed: setCollapsed } = useAppStore();
 
   const handleLogout = () => {
     clearUser();
@@ -56,8 +54,34 @@ export default function AdminSidebar() {
           "fixed top-0 bottom-0 left-0 z-50 flex h-full flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 overflow-hidden flex-shrink-0 transition-transform duration-300 md:transition-none md:translate-x-0 md:relative md:z-auto shadow-2xl md:shadow-none",
           isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
-        animate={{ width: collapsed ? 64 : 240 }}
-        transition={{ duration: 0.25, ease: 'easeInOut' }}
+        animate={{
+          width: collapsed ? 64 : 240,
+          // Right-edge curves outward then snaps flat — left lobe of ∞
+          borderTopRightRadius: collapsed
+            ? ['0px', '48px', '64px', '48px', '0px']
+            : ['0px', '48px', '64px', '48px', '0px'],
+          borderBottomRightRadius: collapsed
+            ? ['0px', '48px', '64px', '48px', '0px']
+            : ['0px', '48px', '64px', '48px', '0px'],
+          // Glow sweeps left-to-right on the right boundary edge
+          boxShadow: collapsed
+            ? [
+                '4px 0px 0px 0px rgba(245,158,11,0)',
+                '8px 0px 24px 2px rgba(245,158,11,0.6)',
+                '4px 0px 0px 0px rgba(245,158,11,0)'
+              ]
+            : [
+                '4px 0px 0px 0px rgba(245,158,11,0)',
+                '8px 0px 24px 2px rgba(245,158,11,0.6)',
+                '4px 0px 0px 0px rgba(245,158,11,0)'
+              ]
+        }}
+        transition={{
+          width: { duration: 0.4, ease: [0.4, 0, 0.2, 1] },
+          borderTopRightRadius: { duration: 0.45, ease: 'easeInOut' },
+          borderBottomRightRadius: { duration: 0.45, ease: 'easeInOut' },
+          boxShadow: { duration: 0.45, ease: 'easeInOut' }
+        }}
       >
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-slate-200 px-3 dark:border-slate-800">
@@ -87,7 +111,7 @@ export default function AdminSidebar() {
           )}
 
           <button
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={() => setCollapsed(!collapsed)}
             className={cn(
               'rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors flex-shrink-0 hidden md:block',
               collapsed && 'hidden'

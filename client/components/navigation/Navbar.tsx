@@ -45,33 +45,23 @@ export default function Navbar() {
 
   useEffect(() => setMounted(true), []);
 
-  // Session Timeout Logic
+  // Session Timeout Logic (based on sliding last activity window)
   const [sessionTimeLeft, setSessionTimeLeft] = useState(60 * 60);
   useEffect(() => {
-    const storedSessionStart = localStorage.getItem('agrivision_session_start');
-    const startTime = storedSessionStart ? parseInt(storedSessionStart) : Date.now();
-    
-    if (!storedSessionStart) {
-      localStorage.setItem('agrivision_session_start', startTime.toString());
-    }
-
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const updateTimer = () => {
+      const lastActivity = localStorage.getItem('agrivision_last_activity');
+      const lastTime = lastActivity ? parseInt(lastActivity, 10) : Date.now();
+      const elapsed = Math.floor((Date.now() - lastTime) / 1000);
       const remaining = Math.max(0, 60 * 60 - elapsed);
       setSessionTimeLeft(remaining);
+    };
 
-      if (remaining === 0) {
-        clearInterval(timer);
-        localStorage.removeItem('agrivision_session_start');
-        localStorage.removeItem('agrivision_token');
-        localStorage.removeItem('agrivision_user');
-        window.location.href = '/auth/login';
-      }
-    }, 1000);
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
 
     return () => clearInterval(timer);
   }, []);
- 
+  
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;

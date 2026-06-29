@@ -89,11 +89,11 @@ export default function TermsPage() {
               <ul className="space-y-2.5 pl-4 list-none">
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-emerald-500 mt-1 flex-shrink-0" />
-                  <span><strong>🌾 Farmers:</strong> Authorized to upload crop leaf images for AI disease pathography diagnosis, register farm details, view mandi prices, and publish daily milk volumes.</span>
+                  <span><strong>🌾 Farmers:</strong> Authorized to upload crop leaf images for AI disease pathography diagnosis, register farm details, view mandi prices, and publish daily crop yield volumes.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-emerald-500 mt-1 flex-shrink-0" />
-                  <span><strong>💼 Buyers:</strong> Authorized to view local milk supply metrics (fat/SNF content), propose contract logs, and track transportation routes.</span>
+                  <span><strong>💼 Buyers:</strong> Authorized to view local crop supply metrics (moisture/impurity content), propose contract logs, and track transportation routes.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-emerald-500 mt-1 flex-shrink-0" />
@@ -112,7 +112,7 @@ export default function TermsPage() {
               </p>
               <ul className="space-y-2 pl-4 list-disc">
                 <li>Quantity commitments and price calculations are locked and legally binding.</li>
-                <li>Both parties are subject to automated verification checks (SNF fat percentages, geolocation logistics timestamps).</li>
+                <li>Both parties are subject to automated verification checks (moisture and impurity percentages, geolocation logistics timestamps).</li>
                 <li>Failure to fulfill a locked contract without mutual consent may lead to temporary or permanent deactivation of your account by the Master Administrator.</li>
               </ul>
             </section>
