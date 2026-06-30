@@ -117,14 +117,8 @@ export default function VoiceAgronomistFAB() {
     } else {
       setTranscript('');
       setResponse('');
-      
-      // Prime the speech synthesis engine to unlock audio in browsers (must happen on user interaction)
       if (synthesisRef.current) {
         synthesisRef.current.cancel();
-        const prime = new SpeechSynthesisUtterance('');
-        prime.volume = 0;
-        synthesisRef.current.speak(prime);
-        synthesisRef.current.resume(); // Ensure it isn't paused
       }
       
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
