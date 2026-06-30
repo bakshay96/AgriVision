@@ -465,3 +465,67 @@ export const mapSeverityToAIStatus = (severity: string): CropAIStatus => {
   };
   return map[severity.toLowerCase()] ?? 'UNKNOWN';
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Voice Agronomist Chat
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const chatWithVoiceAgronomist = async (
+  transcript: string,
+  language: string = 'English'
+): Promise<string> => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your_gemini_api_key_here') {
+    throw new AIServiceError(
+      'API_UNAVAILABLE',
+      'GEMINI_API_KEY is not configured.'
+    );
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  
+  const TEXT_MODEL_CANDIDATES = process.env.GEMINI_MODEL 
+    ? [process.env.GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro']
+    : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro'];
+  
+  const uniqueModels = [...new Set(TEXT_MODEL_CANDIDATES)];
+  let lastError: any = null;
+
+  const prompt = `You are "Kisan Mitra" (Farmer's Friend), an expert and highly practical agronomist. 
+A farmer has asked you a question via voice transcription. 
+
+FARMER'S QUESTION: "${transcript}"
+
+CRITICAL INSTRUCTIONS:
+1. You MUST answer in this exact language: ${language}.
+2. Keep your answer conversational, very brief (under 3-4 sentences), and extremely practical.
+3. Remember this will be spoken aloud by a Text-to-Speech engine, so avoid formatting like markdown, asterisks, bullet points, or complex tables. Just write natural, flowing text.
+4. Directly answer the question without unnecessary pleasantries.`;
+
+  for (const modelName of uniqueModels) {
+    try {
+      console.log(`[AIService] Voice Chat trying model: ${modelName}`);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
+      });
+
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      return text.trim();
+    } catch (err: any) {
+      lastError = err;
+      if (err.message && err.message.includes('429')) {
+        throw new AIServiceError('RATE_LIMITED', 'AI service is busy. Please try again.');
+      }
+      console.warn(`[AIService] Voice chat model ${modelName} failed:`, err.message);
+      // Continue to next model on 404 or other errors
+    }
+  }
+
+  console.error('[AIService] chatWithVoiceAgronomist failed all models. Last error:', lastError);
+  throw new AIServiceError('API_UNAVAILABLE', 'Could not process voice chat at this time.', lastError);
+};

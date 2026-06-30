@@ -65,7 +65,12 @@ export default function ChatLauncher() {
   return (
     <>
       {/* Floating launcher button */}
-      <div className="fixed right-4 bottom-20 z-[80]">
+      <motion.div 
+        drag
+        dragMomentum={false}
+        style={{ touchAction: 'none' }}
+        className="fixed right-4 bottom-20 z-[80]"
+      >
         <AnimatePresence>
           {isExpanded && (
             <motion.div
@@ -357,7 +362,7 @@ export default function ChatLauncher() {
             className="absolute inset-0 rounded-full border-2 border-red-400 pointer-events-none"
           />
         )}
-      </div>
+      </motion.div>
     </>
   );
 }

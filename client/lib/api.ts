@@ -107,6 +107,8 @@ export const aiApi = {
   getAnalyses: (params?: Record<string, unknown>) => api.get('/ai/analyses', { params }),
   getAnalysisById: (id: string) => api.get(`/ai/analyses/${id}`),
   archiveAnalysis: (id: string) => api.delete(`/ai/analyses/${id}`),
+  askVoiceAgronomist: (transcript: string, language: string) => 
+    api.post('/ai/voice-chat', { transcript, language }),
 };
 
 // ─── Inventory ───────────────────────────────────────────────────────────────
