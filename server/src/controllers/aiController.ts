@@ -7,6 +7,7 @@ import { createError } from '../middleware/errorHandler';
 import {
   analyzeImageBuffer,
   analyzeImageWithGemini,
+  chatWithVoiceAgronomist,
   AIServiceError,
   mapSeverityToAIStatus,
 } from '../services/aiService';
@@ -394,3 +395,31 @@ export const archiveAnalysis = async (req: AuthRequest, res: Response): Promise<
 // Exported for route file (legacy disk upload dir)
 export const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/ai/voice-chat
+// ─────────────────────────────────────────────────────────────────────────────
+export const voiceChat = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { transcript, language } = req.body;
+
+  if (!transcript || typeof transcript !== 'string') {
+    throw createError('Transcript is required and must be a string.', 400);
+  }
+
+  try {
+    const responseText = await chatWithVoiceAgronomist(transcript, language);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        response: responseText
+      }
+    });
+  } catch (err) {
+    if (err instanceof AIServiceError) {
+      const status = aiErrorToHttp(err.code);
+      throw createError(err.message, status);
+    }
+    throw err;
+  }
+};

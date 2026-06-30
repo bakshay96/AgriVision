@@ -10,6 +10,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useSocket } from '@/hooks/useSocket';
 import FloatingChatContainer from '@/components/chat/FloatingChatContainer';
 import ChatLauncher from '@/components/chat/ChatLauncher';
+import VoiceAgronomistFAB from '@/components/ai/VoiceAgronomistFAB';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -102,8 +103,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </motion.div>
 
       <MobileBottomNav />
+
+      {/* Floating Elements */}
       <FloatingChatContainer />
       <ChatLauncher />
+      <VoiceAgronomistFAB />
     </div>
   );
 }

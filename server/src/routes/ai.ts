@@ -6,6 +6,7 @@ import {
   getAnalyses,
   getAnalysisById,
   archiveAnalysis,
+  voiceChat,
 } from '../controllers/aiController';
 import { protect } from '../middleware/auth';
 import { tenantIsolation } from '../middleware/tenant';
@@ -79,5 +80,7 @@ router.post('/analyze', diskUpload.single('image'), analyzeImage);
 router.get('/analyses',     getAnalyses);
 router.get('/analyses/:id', getAnalysisById);
 router.delete('/analyses/:id', archiveAnalysis);
+
+router.post('/voice-chat', voiceChat);
 
 export default router;
