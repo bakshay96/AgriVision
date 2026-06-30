@@ -67,6 +67,11 @@ export default function VoiceAgronomistFAB() {
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error', event.error);
           setIsListening(false);
+          if (event.error === 'not-allowed') {
+            setResponse('Microphone access denied. Please allow microphone permissions in your browser settings or ensure the site is running on a secure HTTPS connection.');
+          } else if (event.error !== 'no-speech') { // Ignore no-speech as it's common
+            setResponse('Sorry, there was an issue with the microphone. Please try again.');
+          }
         };
 
         recognitionRef.current.onend = () => {
